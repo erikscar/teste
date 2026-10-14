@@ -139,6 +139,13 @@ public partial class FarmingPage : Page
             loaded.DailyTenOfTenLaunchers = loaded.DailyTenOfTenLaunchers
                 .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             loaded.DailyFavoriteLaunchers ??= loaded.DailyFavorites ? [.. loaded.DailyLaunchers] : [];
+            loaded.DailyFavoriteRetryLaunchers ??= [];
+            loaded.DailyFavoriteRetryLaunchers = loaded.DailyFavoriteRetryLaunchers
+                .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            loaded.DailyFavoriteRetryMaps ??= new(StringComparer.OrdinalIgnoreCase);
+            foreach (var launcher in loaded.DailyFavoriteRetryMaps.Keys.ToArray())
+                if (!Launchers.Contains(launcher) || !MissionMaps.Contains(loaded.DailyFavoriteRetryMaps[launcher]))
+                    loaded.DailyFavoriteRetryMaps.Remove(launcher);
             foreach (var launcher in loaded.DailyFavoriteLaunchers)
                 if (!loaded.DailyLaunchers.Contains(launcher, StringComparer.OrdinalIgnoreCase))
                     loaded.DailyLaunchers.Add(launcher);
@@ -160,6 +167,10 @@ public partial class FarmingPage : Page
                 checkbox.IsChecked = Configuration.DailyFavoriteLaunchers.Contains((string)checkbox.Tag);
             foreach (var combo in new[] { DailyMapLauncher1, DailyMapLauncher2, DailyMapSteam })
                 combo.SelectedItem = GetDailyMap((string)combo.Tag);
+            foreach (var checkbox in new[] { DailyRetryLauncher1, DailyRetryLauncher2, DailyRetrySteam })
+                checkbox.IsChecked = Configuration.DailyFavoriteRetryLaunchers.Contains((string)checkbox.Tag);
+            foreach (var combo in new[] { DailyRetryMapLauncher1, DailyRetryMapLauncher2, DailyRetryMapSteam })
+                combo.SelectedItem = GetDailyFavoriteRetryMap((string)combo.Tag);
             PresetName.Text = preset.Name;
             AppendLog($"Preset '{preset.Name}' carregado. Pressione Iniciar para executar o fluxo.");
         }
@@ -274,6 +285,30 @@ public partial class FarmingPage : Page
     {
         if (_loadingPreset || sender is not ComboBox { Tag: string launcher, SelectedItem: string map }) return;
         Configuration.DailyLauncherMaps[launcher] = map;
+    }
+
+    private string GetDailyFavoriteRetryMap(string launcher) =>
+        Configuration.DailyFavoriteRetryMaps.TryGetValue(launcher, out var map) && MissionMaps.Contains(map) ? map : "Campo";
+
+    private void DailyFavoriteRetry_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loadingPreset || sender is not CheckBox { Tag: string launcher }) return;
+        Configuration.DailyFavoriteRetryLaunchers ??= [];
+        if (!Configuration.DailyFavoriteRetryLaunchers.Contains(launcher, StringComparer.OrdinalIgnoreCase))
+            Configuration.DailyFavoriteRetryLaunchers.Add(launcher);
+    }
+
+    private void DailyFavoriteRetry_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_loadingPreset || sender is not CheckBox { Tag: string launcher }) return;
+        Configuration.DailyFavoriteRetryLaunchers ??= [];
+        Configuration.DailyFavoriteRetryLaunchers.RemoveAll(name => string.Equals(name, launcher, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void DailyFavoriteRetryMap_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingPreset || sender is not ComboBox { Tag: string launcher, SelectedItem: string map }) return;
+        Configuration.DailyFavoriteRetryMaps[launcher] = map;
     }
 
     private void DailyMissionMaps_Loaded(object sender, RoutedEventArgs e)
@@ -450,6 +485,7 @@ public partial class FarmingPage : Page
 
         AppendLog($"DailyArena: starter {Configuration.ArenaStarter}; convidado {Configuration.ArenaInviter}.");
         await PrepareRoutineWindowAsync(starter, cancellationToken);
+        await Task.Delay(5000, cancellationToken);
         await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
         await Task.Delay(350, cancellationToken);
         var steps = new[] { "ícone Guerra", "Arena", "Criar Arena (menu)", "Privado", "campo da senha", "botão 2", "Entrada completa", "Criar Arena", "adicionar convidados", "Convidar todos" };
@@ -893,7 +929,8 @@ public partial class FarmingPage : Page
         }
     }
 
-    private async Task DailyFavoriteMissions(CancellationToken cancellationToken)
+    private async Task DailyFavoriteMissions(CancellationToken cancellationToken,
+        string? mapOverride = null, string? onlyLauncher = null, bool allowRetry = true)
     {
         if (Configuration.DailyFavoriteLaunchers is not { Count: > 0 })
         {
@@ -935,8 +972,12 @@ public partial class FarmingPage : Page
         var travelRegion = new RelativeSearchRegion(0.6175, 0.4203, 0.2985, 0.2850);
         var travelItemRegion = new RelativeSearchRegion(0.3632, 0.6610, 0.3109, 0.1572);
         var energyRegion = new RelativeSearchRegion(0.1615, 0.6585, 0.0912, 0.1646);
+        var completedLaunchers = new List<(string Launcher, PreviewWindow Target)>();
 
-        foreach (var launcher in Launchers.Where(Configuration.DailyFavoriteLaunchers!.Contains))
+        var selectedLaunchers = Launchers.Where(Configuration.DailyFavoriteLaunchers!.Contains);
+        if (onlyLauncher is not null)
+            selectedLaunchers = selectedLaunchers.Where(launcher => string.Equals(launcher, onlyLauncher, StringComparison.OrdinalIgnoreCase));
+        foreach (var launcher in selectedLaunchers)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!targets.TryGetValue(launcher, out var target))
@@ -951,7 +992,7 @@ public partial class FarmingPage : Page
                 await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x75, "F6", cancellationToken, AppendLog);
                 await Task.Delay(350, cancellationToken);
-                var selectedMap = GetDailyMap(launcher);
+                var selectedMap = mapOverride ?? GetDailyMap(launcher);
                 var mapTemplate = selectedMap switch
                 {
                     "Campo" => fieldTemplate,
@@ -1016,6 +1057,14 @@ public partial class FarmingPage : Page
                 AppendLog($"Missões favoritas — {launcher}: busca encerrada após {acceptedCount} missão(ões) aceita(s) e {totalScrolls} rolagem(ns)." +
                     (totalScrolls >= maxMissionScrolls ? " Limite de rolagens atingido." : " Nenhum botão foi detectado após rolar a lista."));
 
+                if (acceptedCount == 0)
+                {
+                    await RecoverWhenNoMissionAcceptedAsync(target, launcher, templatesDirectory,
+                        travelItemTemplate, cancellationToken);
+                    completedLaunchers.Add((launcher, target));
+                    continue;
+                }
+
                 await Task.Delay(300, cancellationToken);
                 var favoriteSteps = new (string Template, RelativeSearchRegion Region, string Name)[]
                 {
@@ -1072,10 +1121,94 @@ public partial class FarmingPage : Page
                         await _windowClickService.ResizeToSmallestAsync(target, cancellationToken, AppendLog);
                         await _windowClickService.ActivateAsync(target, cancellationToken);
                     }
+                    completedLaunchers.Add((launcher, target));
                 }
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { AppendLog($"Missões favoritas — {launcher}: falha — {ex.Message}"); }
+        }
+
+        if (allowRetry)
+        {
+            var retryMonitors = completedLaunchers
+                .Where(entry => Configuration.DailyFavoriteRetryLaunchers.Contains(entry.Launcher))
+                .ToArray();
+            if (retryMonitors.Length > 0)
+                await Task.WhenAll(retryMonitors.Select(entry => MonitorMissionCompletionAndRetryAsync(
+                    entry.Target, entry.Launcher, templatesDirectory, cancellationToken)));
+        }
+    }
+
+    private async Task RecoverWhenNoMissionAcceptedAsync(PreviewWindow target, string launcher,
+        string templatesDirectory, string travelItemTemplate, CancellationToken cancellationToken)
+    {
+        AppendLog($"Missões favoritas — {launcher}: nenhum clique em Aceitar missão; iniciando sequência alternativa.");
+        await _windowClickService.PressEscapeTimesAsync(target, 3, cancellationToken, AppendLog);
+        await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+        await Task.Delay(350, cancellationToken);
+
+        var mapIconTemplate = Path.Combine(templatesDirectory, "daily-favorite-map-icon.png");
+        var pickaxeTemplate = Path.Combine(templatesDirectory, "daily-favorite-pickaxe.png");
+        var energyIconTemplate = Path.Combine(templatesDirectory, "daily-favorite-energy-icon.png");
+        var steps = new (string Template, RelativeSearchRegion Region, Int32Rect? Crop, string Name)[]
+        {
+            (mapIconTemplate, new(0.5940, 0.1746, 0.0940, 0.1007), null, "ícone do mapa"),
+            (pickaxeTemplate, new(0.2955, 0.1034, 0.4035, 0.7271), null, "ícone de picareta"),
+            (travelItemTemplate, new(0.2969, 0.8330, 0.4090, 0.1449), new Int32Rect(104, 14, 91, 26), "item Deslocamento rápido")
+        };
+        foreach (var step in steps)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AppendLog($"Missões favoritas — {launcher}: procurando {step.Name} em X={step.Region.X:P2}, Y={step.Region.Y:P2}, {step.Region.Width:P2} × {step.Region.Height:P2}.");
+            var found = await FindAndClickTemplateAsync(target, step.Template, step.Region, step.Crop,
+                step.Name, 0.72, cancellationToken);
+            if (!found)
+                throw new InvalidOperationException($"não foi possível localizar {step.Name} na sequência alternativa.");
+            await Task.Delay(350, cancellationToken);
+        }
+
+        AppendLog($"Missões favoritas — {launcher}: aguardando 7 segundos antes de pressionar N e F9.");
+        await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+        await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
+        await Task.Delay(350, cancellationToken);
+        await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
+        await Task.Delay(350, cancellationToken);
+        var energyRegion = new RelativeSearchRegion(0.1490, 0.6585, 0.1133, 0.1695);
+        AppendLog($"Missões favoritas — {launcher}: procurando Poupança de energia em X={energyRegion.X:P2}, Y={energyRegion.Y:P2}, {energyRegion.Width:P2} × {energyRegion.Height:P2}.");
+        var energySelected = await FindAndClickTemplateAsync(target, energyIconTemplate, energyRegion, null,
+            "ícone de Poupança de energia", 0.72, cancellationToken);
+        if (!energySelected)
+            throw new InvalidOperationException("não foi possível localizar o ícone de Poupança de energia.");
+        await _windowClickService.ResizeToSmallestAsync(target, cancellationToken, AppendLog);
+        await _windowClickService.ActivateAsync(target, cancellationToken);
+    }
+
+    private async Task MonitorMissionCompletionAndRetryAsync(PreviewWindow target, string launcher,
+        string templatesDirectory, CancellationToken cancellationToken)
+    {
+        var completedRegion = new RelativeSearchRegion(0.3494, 0.7666, 0.3192, 0.1179);
+        var completedTemplate = Path.Combine(templatesDirectory, "daily-favorite-completed.png");
+        if (!File.Exists(completedTemplate))
+            throw new FileNotFoundException("Falta a imagem de referência do texto 'concluído'.", completedTemplate);
+
+        AppendLog($"Missões favoritas — {launcher}: monitorando continuamente o texto 'concluído'. Use Stop para encerrar a espera.");
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await IsMissionCompletedVisibleAsync(target, completedTemplate, completedRegion, cancellationToken))
+            {
+                await Task.Delay(500, cancellationToken);
+                continue;
+            }
+
+            var retryMap = GetDailyFavoriteRetryMap(launcher);
+            AppendLog($"Missões favoritas — {launcher}: 'concluído' detectado; repetindo no mapa {retryMap}.");
+            await DailyFavoriteMissions(cancellationToken, retryMap, launcher, allowRetry: false);
+            AppendLog($"Missões favoritas — {launcher}: aguardando o texto 'concluído' desaparecer para rearmar a observação.");
+            while (await IsMissionCompletedVisibleAsync(target, completedTemplate, completedRegion,
+                       cancellationToken, logConfirmation: false))
+                await Task.Delay(1000, cancellationToken);
+            AppendLog($"Missões favoritas — {launcher}: texto 'concluído' desapareceu; observação contínua retomada.");
         }
     }
 
@@ -1479,6 +1612,42 @@ public partial class FarmingPage : Page
         }
 
         AppendLog($"DailyScroll: item não encontrado na região após {scrollCount} rolagens. Melhor confiança: {bestConfidence:0.00}; mínimo: {threshold:0.00}. Nenhum clique foi enviado.");
+        return false;
+    }
+
+    private async Task<bool> IsMissionCompletedVisibleAsync(PreviewWindow target, string templatePath,
+        RelativeSearchRegion region, CancellationToken cancellationToken, bool logConfirmation = true)
+    {
+        if (!File.Exists(templatePath))
+        {
+            AppendLog("Missões favoritas: falta a imagem de referência do texto 'concluído'.");
+            return false;
+        }
+
+        var searchTime = System.Diagnostics.Stopwatch.StartNew();
+        var consecutiveMatches = 0;
+        OpenCvSharp.Rect? previousMatch = null;
+        while (searchTime.Elapsed < TimeSpan.FromSeconds(1))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
+            var result = await _templateSearchService.FindAsync(frame, templatePath, region, 0.78,
+                cancellationToken);
+            ScreenshotImage.Source = result.AnnotatedFrame;
+            var stablePosition = previousMatch is { } previous &&
+                Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
+                Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
+            consecutiveMatches = result.Found ? (stablePosition ? consecutiveMatches + 1 : 1) : 0;
+            previousMatch = result.Found ? result.Bounds : null;
+            if (consecutiveMatches >= 3)
+            {
+                if (logConfirmation)
+                    AppendLog($"Missões favoritas — {target.ProcessName}: texto 'concluído' confirmado ({result.Confidence:0.00}/0.78).");
+                return true;
+            }
+            await Task.Delay(120, cancellationToken);
+        }
+
         return false;
     }
 

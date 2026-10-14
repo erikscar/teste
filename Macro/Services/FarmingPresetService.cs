@@ -45,8 +45,16 @@ public sealed class FarmingPreset : System.ComponentModel.INotifyPropertyChanged
             if (c.DailyScroll) Add("Pergaminho diário", Launchers(c.DailyScrollLaunchers ?? []));
             if (c.Normal.IsEnabled) Add("Raids normais", RaidDetails(c.NormalLaunchers), $"{c.Normal.RepeatCountText}×");
             if (c.Boss.IsEnabled) Add("Boss", RaidDetails(c.BossLaunchers), $"{c.Boss.RepeatCountText}×");
-            if (c.DailyFavorites) Add("Missões favoritas", string.Join(" · ", (c.DailyFavoriteLaunchers ?? c.DailyLaunchers).Select(launcher =>
-                $"{launcher}: {(c.DailyLauncherMaps.TryGetValue(launcher, out var map) ? map : "Campo")}")));
+            if (c.DailyFavorites)
+            {
+                var favoriteDetails = string.Join(" · ", (c.DailyFavoriteLaunchers ?? c.DailyLaunchers).Select(launcher =>
+                    $"{launcher}: {(c.DailyLauncherMaps.TryGetValue(launcher, out var map) ? map : "Campo")}"));
+                var retryDetails = (c.DailyFavoriteRetryLaunchers ?? []).Select(launcher =>
+                    $"{launcher}: {(c.DailyFavoriteRetryMaps.TryGetValue(launcher, out var map) ? map : "Campo")}").ToArray();
+                if (retryDetails.Length > 0)
+                    favoriteDetails += $"\nRetentativa — {string.Join(" · ", retryDetails)}";
+                Add("Missões favoritas", favoriteDetails);
+            }
             if (c.ArenaEnabled) Add("Arena", $"Starter: {c.ArenaStarter}\nConvidado: {c.ArenaInviter}" +
                 (string.IsNullOrWhiteSpace(c.ArenaStartTime) ? "" : $"\nHorário: {c.ArenaStartTime}"), $"{c.ArenaRepeatCountText}×");
             return c.OrderedActions.Select(title => steps.FirstOrDefault(step => step.Title == title))
@@ -65,7 +73,12 @@ public sealed class FarmingPreset : System.ComponentModel.INotifyPropertyChanged
             if (c.DailyScroll) steps.Add("Pergaminho diário");
             if (c.Normal.IsEnabled) steps.Add($"Raids normais ({c.Normal.RepeatCountText}x) — {c.NormalLaunchers.Starter}; convidados: {c.NormalLaunchers.Guest1}, {c.NormalLaunchers.Guest2}");
             if (c.Boss.IsEnabled) steps.Add($"Boss ({c.Boss.RepeatCountText}x) — {c.BossLaunchers.Starter}; convidados: {c.BossLaunchers.Guest1}, {c.BossLaunchers.Guest2}");
-            if (c.DailyFavorites) steps.Add("Missões favoritas — " + string.Join(", ", c.DailyFavoriteLaunchers ?? c.DailyLaunchers));
+            if (c.DailyFavorites)
+                steps.Add("Missões favoritas — " + string.Join(", ", c.DailyFavoriteLaunchers ?? c.DailyLaunchers) +
+                    ((c.DailyFavoriteRetryLaunchers ?? []).Count > 0
+                        ? "\nRetentativa — " + string.Join(", ", (c.DailyFavoriteRetryLaunchers ?? []).Select(launcher =>
+                            $"{launcher}: {(c.DailyFavoriteRetryMaps.TryGetValue(launcher, out var map) ? map : "Campo")}"))
+                        : ""));
             if (steps.Count == 0) steps.Add("Nenhuma rotina ativada");
             if (c.DailyDonation) steps.Add("Launchers da doação: " + string.Join(", ", c.DonationLaunchers));
             if (c.DailyScroll) steps.Add("Launchers do DailyScroll: " + string.Join(", ", c.DailyScrollLaunchers ?? []));

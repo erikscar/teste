@@ -253,18 +253,27 @@
                                     <CheckBox x:Name="DailyFavoriteLauncher1" Content="Executar as missões favoritas" Tag="MIR4 Launcher 1" Checked="DailyFavoriteLauncher_Checked" Unchecked="DailyFavoriteLauncher_Unchecked" Margin="0,0,0,8" />
                                     <TextBlock Text="Mapa das missões" Style="{StaticResource Caption}" Margin="0,0,0,5" />
                                     <ComboBox x:Name="DailyMapLauncher1" Tag="MIR4 Launcher 1" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyMap_SelectionChanged" AutomationProperties.Name="Mapa das missões do Launcher 1" />
+                                    <CheckBox x:Name="DailyRetryLauncher1" Content="Retentar se aparecer concluído" Tag="MIR4 Launcher 1" Checked="DailyFavoriteRetry_Checked" Unchecked="DailyFavoriteRetry_Unchecked" Margin="0,10,0,5" />
+                                    <TextBlock Text="Mapa da retentativa" Style="{StaticResource Caption}" Margin="0,0,0,5" />
+                                    <ComboBox x:Name="DailyRetryMapLauncher1" Tag="MIR4 Launcher 1" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyFavoriteRetryMap_SelectionChanged" IsEnabled="{Binding IsChecked, ElementName=DailyRetryLauncher1}" AutomationProperties.Name="Mapa da retentativa do Launcher 1" />
                                 </StackPanel>
                                 <StackPanel Width="205" Margin="0,0,12,10">
                                     <CheckBox x:Name="DailyLauncher2" Style="{StaticResource DonationChoice}" Content="Launcher 2" Tag="MIR4 Launcher 2" Checked="DailyLauncher_Checked" Unchecked="DailyLauncher_Unchecked" />
                                     <CheckBox x:Name="DailyFavoriteLauncher2" Content="Executar as missões favoritas" Tag="MIR4 Launcher 2" Checked="DailyFavoriteLauncher_Checked" Unchecked="DailyFavoriteLauncher_Unchecked" Margin="0,0,0,8" />
                                     <TextBlock Text="Mapa das missões" Style="{StaticResource Caption}" Margin="0,0,0,5" />
                                     <ComboBox x:Name="DailyMapLauncher2" Tag="MIR4 Launcher 2" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyMap_SelectionChanged" AutomationProperties.Name="Mapa das missões do Launcher 2" />
+                                    <CheckBox x:Name="DailyRetryLauncher2" Content="Retentar se aparecer concluído" Tag="MIR4 Launcher 2" Checked="DailyFavoriteRetry_Checked" Unchecked="DailyFavoriteRetry_Unchecked" Margin="0,10,0,5" />
+                                    <TextBlock Text="Mapa da retentativa" Style="{StaticResource Caption}" Margin="0,0,0,5" />
+                                    <ComboBox x:Name="DailyRetryMapLauncher2" Tag="MIR4 Launcher 2" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyFavoriteRetryMap_SelectionChanged" IsEnabled="{Binding IsChecked, ElementName=DailyRetryLauncher2}" AutomationProperties.Name="Mapa da retentativa do Launcher 2" />
                                 </StackPanel>
                                 <StackPanel Width="205" Margin="0,0,12,10">
                                     <CheckBox x:Name="DailySteam" Style="{StaticResource DonationChoice}" Content="Steam" Tag="MIR4 Steam" Checked="DailyLauncher_Checked" Unchecked="DailyLauncher_Unchecked" />
                                     <CheckBox x:Name="DailyFavoriteSteam" Content="Executar as missões favoritas" Tag="MIR4 Steam" Checked="DailyFavoriteLauncher_Checked" Unchecked="DailyFavoriteLauncher_Unchecked" Margin="0,0,0,8" />
                                     <TextBlock Text="Mapa das missões" Style="{StaticResource Caption}" Margin="0,0,0,5" />
                                     <ComboBox x:Name="DailyMapSteam" Tag="MIR4 Steam" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyMap_SelectionChanged" AutomationProperties.Name="Mapa das missões do Steam" />
+                                    <CheckBox x:Name="DailyRetrySteam" Content="Retentar se aparecer concluído" Tag="MIR4 Steam" Checked="DailyFavoriteRetry_Checked" Unchecked="DailyFavoriteRetry_Unchecked" Margin="0,10,0,5" />
+                                    <TextBlock Text="Mapa da retentativa" Style="{StaticResource Caption}" Margin="0,0,0,5" />
+                                    <ComboBox x:Name="DailyRetryMapSteam" Tag="MIR4 Steam" ItemsSource="{Binding MissionMaps}" SelectedItem="Campo" SelectionChanged="DailyFavoriteRetryMap_SelectionChanged" IsEnabled="{Binding IsChecked, ElementName=DailyRetrySteam}" AutomationProperties.Name="Mapa da retentativa do Steam" />
                                 </StackPanel>
                             </WrapPanel>
                             <ItemsControl ItemsSource="{Binding Configuration.DailyItems}" ItemTemplate="{StaticResource DailyMissionTemplate}" ItemsPanel="{StaticResource CardsPanel}" />

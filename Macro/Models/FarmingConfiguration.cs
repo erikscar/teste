@@ -20,6 +20,8 @@ public sealed class FarmingConfiguration
     public List<string> DailyLaunchers { get; set; } = [];
     public List<string>? DailyFavoriteLaunchers { get; set; }
     public Dictionary<string, string> DailyLauncherMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> DailyFavoriteRetryLaunchers { get; set; } = [];
+    public Dictionary<string, string> DailyFavoriteRetryMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool DailyDonation { get; set; }
     public bool DailyScroll { get; set; }
     public bool DailyTenOfTenEnabled { get; set; }
