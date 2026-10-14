@@ -1,4 +1,6 @@
 using OpenCvSharp;
+using System.Collections.Concurrent;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
@@ -11,6 +13,10 @@ public sealed record TemplateSearchResult(bool Found, double Confidence, OpenCvS
 
 public sealed class TemplateSearchService
 {
+    // Os templates e as escalas são os mesmos a cada frame. Mantê-los em memória
+    // evita reler PNGs e redimensionar dezenas de vezes durante cada busca.
+    private static readonly ConcurrentDictionary<TemplateCacheKey, Lazy<IReadOnlyList<TemplateVariant>>> TemplateCache = new();
+
     public Task<TemplateSearchResult> FindAsync(BitmapSource frame, string templatePath,
         RelativeSearchRegion region, double threshold, CancellationToken token, Int32Rect? templateCrop = null) =>
         Task.Run(() => Find(frame, templatePath, region, threshold, token, templateCrop), token);
@@ -22,27 +28,13 @@ public sealed class TemplateSearchService
         using var color = ToBgr(frame);
         using var gray = new Mat();
         Cv2.CvtColor(color, gray, ColorConversionCodes.BGR2GRAY);
-        using var sourceTemplate = Cv2.ImRead(templatePath, ImreadModes.Unchanged);
-        if (sourceTemplate.Empty()) throw new InvalidOperationException("Não foi possível abrir a imagem selecionada.");
-        using var originalTemplate = new Mat();
-        using var originalMask = new Mat();
-        if (sourceTemplate.Channels() == 4)
-        {
-            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGRA2GRAY);
-            Cv2.ExtractChannel(sourceTemplate, originalMask, 3);
-            Cv2.Threshold(originalMask, originalMask, 0, 255, ThresholdTypes.Binary);
-        }
-        else if (sourceTemplate.Channels() == 3)
-            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGR2GRAY);
-        else
-            sourceTemplate.CopyTo(originalTemplate);
-        var crop = templateCrop ?? new Int32Rect(0, 0, originalTemplate.Width, originalTemplate.Height);
-        if (crop.X < 0 || crop.Y < 0 || crop.Width <= 0 || crop.Height <= 0 ||
-            crop.X + crop.Width > originalTemplate.Width || crop.Y + crop.Height > originalTemplate.Height)
-            throw new ArgumentException("Recorte do ícone fora dos limites da imagem.");
-        using var template = new Mat(originalTemplate, new OpenCvSharp.Rect(crop.X, crop.Y, crop.Width, crop.Height));
-        using var templateMask = originalMask.Empty() ? new Mat() : new Mat(originalMask,
-            new OpenCvSharp.Rect(crop.X, crop.Y, crop.Width, crop.Height));
+        var fullPath = Path.GetFullPath(templatePath);
+        var file = new FileInfo(fullPath);
+        if (!file.Exists) throw new FileNotFoundException("Não foi possível abrir a imagem selecionada.", fullPath);
+        var key = new TemplateCacheKey(fullPath, file.Length, file.LastWriteTimeUtc.Ticks,
+            templateCrop?.X ?? -1, templateCrop?.Y ?? -1, templateCrop?.Width ?? -1, templateCrop?.Height ?? -1);
+        var variants = TemplateCache.GetOrAdd(key, cacheKey => new Lazy<IReadOnlyList<TemplateVariant>>(
+            () => LoadVariants(cacheKey), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         token.ThrowIfCancellationRequested();
 
         var x = Math.Clamp((int)Math.Round(region.X * gray.Width), 0, gray.Width - 1);
@@ -54,29 +46,18 @@ public sealed class TemplateSearchService
         var found = false;
         double confidence = double.NegativeInfinity;
         var bounds = new OpenCvSharp.Rect();
-        // O template da captura pode ter uma escala diferente da janela atual.
-        // Testamos escalas próximas sem redimensionar o frame inteiro.
-        // O jogo pode exibir os assets em resoluções/densidades bem diferentes.
-        // Escanear escalas 0.40x–1.80x, com passos finos, evita perder imagens
-        // grandes como o botão Cobre quando o template veio de outra resolução.
-        for (var scaleStep = 40; scaleStep <= 180; scaleStep += 4)
+        // Preserva a faixa e os passos de escala originais; somente os templates
+        // pré-processados são reutilizados entre frames.
+        foreach (var variant in variants)
         {
-            var scale = scaleStep / 100d;
             token.ThrowIfCancellationRequested();
-            var width = Math.Max(1, (int)Math.Round(template.Width * scale));
-            var height = Math.Max(1, (int)Math.Round(template.Height * scale));
+            var scaledTemplate = variant.Template;
+            var width = scaledTemplate.Width;
+            var height = scaledTemplate.Height;
             if (width > roi.Width || height > roi.Height) continue;
-            using var scaledTemplate = new Mat();
-            Cv2.Resize(template, scaledTemplate, new OpenCvSharp.Size(width, height), 0, 0,
-                scale < 1 ? InterpolationFlags.Area : InterpolationFlags.Cubic);
             using var scores = new Mat();
-            if (!templateMask.Empty())
-            {
-                using var scaledMask = new Mat();
-                Cv2.Resize(templateMask, scaledMask, new OpenCvSharp.Size(width, height), 0, 0,
-                    InterpolationFlags.Nearest);
-                Cv2.MatchTemplate(roiMat, scaledTemplate, scores, TemplateMatchModes.CCorrNormed, scaledMask);
-            }
+            if (variant.Mask is { } mask)
+                Cv2.MatchTemplate(roiMat, scaledTemplate, scores, TemplateMatchModes.CCorrNormed, mask);
             else
                 Cv2.MatchTemplate(roiMat, scaledTemplate, scores, TemplateMatchModes.CCoeffNormed);
             Cv2.MinMaxLoc(scores, out _, out var max, out _, out var location);
@@ -108,6 +89,58 @@ public sealed class TemplateSearchService
         bitmap.Freeze();
         return new(found, confidence, bounds, bitmap);
     }
+
+    private static IReadOnlyList<TemplateVariant> LoadVariants(TemplateCacheKey key)
+    {
+        using var sourceTemplate = Cv2.ImRead(key.Path, ImreadModes.Unchanged);
+        if (sourceTemplate.Empty()) throw new InvalidOperationException("Não foi possível abrir a imagem selecionada.");
+        using var originalTemplate = new Mat();
+        using var originalMask = new Mat();
+        if (sourceTemplate.Channels() == 4)
+        {
+            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGRA2GRAY);
+            Cv2.ExtractChannel(sourceTemplate, originalMask, 3);
+            Cv2.Threshold(originalMask, originalMask, 0, 255, ThresholdTypes.Binary);
+        }
+        else if (sourceTemplate.Channels() == 3)
+            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGR2GRAY);
+        else
+            sourceTemplate.CopyTo(originalTemplate);
+
+        var crop = key.CropX < 0
+            ? new Int32Rect(0, 0, originalTemplate.Width, originalTemplate.Height)
+            : new Int32Rect(key.CropX, key.CropY, key.CropWidth, key.CropHeight);
+        if (crop.X < 0 || crop.Y < 0 || crop.Width <= 0 || crop.Height <= 0 ||
+            crop.X + crop.Width > originalTemplate.Width || crop.Y + crop.Height > originalTemplate.Height)
+            throw new ArgumentException("Recorte do ícone fora dos limites da imagem.");
+
+        using var template = new Mat(originalTemplate, new OpenCvSharp.Rect(crop.X, crop.Y, crop.Width, crop.Height));
+        using var templateMask = originalMask.Empty() ? new Mat() : new Mat(originalMask,
+            new OpenCvSharp.Rect(crop.X, crop.Y, crop.Width, crop.Height));
+        var variants = new List<TemplateVariant>(36);
+        for (var scaleStep = 40; scaleStep <= 180; scaleStep += 4)
+        {
+            var scale = scaleStep / 100d;
+            var width = Math.Max(1, (int)Math.Round(template.Width * scale));
+            var height = Math.Max(1, (int)Math.Round(template.Height * scale));
+            var scaledTemplate = new Mat();
+            Cv2.Resize(template, scaledTemplate, new OpenCvSharp.Size(width, height), 0, 0,
+                scale < 1 ? InterpolationFlags.Area : InterpolationFlags.Cubic);
+            Mat? scaledMask = null;
+            if (!templateMask.Empty())
+            {
+                scaledMask = new Mat();
+                Cv2.Resize(templateMask, scaledMask, new OpenCvSharp.Size(width, height), 0, 0,
+                    InterpolationFlags.Nearest);
+            }
+            variants.Add(new(scaledTemplate, scaledMask));
+        }
+        return variants;
+    }
+
+    private sealed record TemplateCacheKey(string Path, long Length, long LastWriteTicks,
+        int CropX, int CropY, int CropWidth, int CropHeight);
+    private sealed record TemplateVariant(Mat Template, Mat? Mask);
 
     private static Mat ToBgr(BitmapSource frame)
     {
