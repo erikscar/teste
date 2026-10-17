@@ -1,7 +1,8 @@
-<Page x:Class="Macro.Views.PresetsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:Macro.Controls" Background="{StaticResource CanvasBrush}" FontFamily="Segoe UI" FontSize="14" Title="Presets">
+<Page x:Class="Macro.Views.PresetsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:Macro.Controls" Background="{StaticResource CanvasBrush}" FontFamily="{StaticResource PoppinsFont}" FontSize="14" Title="Presets">
     <Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="28,24">
+            <TextBlock Text="BIBLIOTECA / FLUXOS SALVOS" FontSize="10" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,6" />
             <TextBlock Text="Presets" Style="{StaticResource Heading}" />
             <TextBlock Text="Arraste as etapas para mudar a ordem e clique em Salvar ordem. Configure as rotinas e a Arena em Farming." Style="{StaticResource Caption}" TextWrapping="Wrap" />
             <TextBlock x:Name="Message" TextWrapping="Wrap" Margin="0,12" />

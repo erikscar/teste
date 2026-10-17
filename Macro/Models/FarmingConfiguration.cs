@@ -7,6 +7,8 @@ public sealed class FarmingConfiguration
     public LauncherGroup BossLaunchers { get; set; } = new();
     public string ArenaStarter { get; set; } = "MIR4 Steam";
     public string ArenaInviter { get; set; } = "MIR4 Launcher 1";
+    public string SecretPeakLauncher { get; set; } = "MIR4 Launcher 1";
+    public string MagicSquareLauncher { get; set; } = "MIR4 Launcher 1";
     public string ArenaRepeatCountText { get; set; } = "1";
     public string ArenaStartTime { get; set; } = "";
     public bool ArenaEnabled { get; set; }
@@ -22,9 +24,12 @@ public sealed class FarmingConfiguration
     public Dictionary<string, string> DailyLauncherMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> DailyFavoriteRetryLaunchers { get; set; } = [];
     public Dictionary<string, string> DailyFavoriteRetryMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public bool DailyDonation { get; set; }
-    public bool DailyScroll { get; set; }
-    public bool DailyTenOfTenEnabled { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool DailyDonation => DonationLaunchers is { Count: > 0 };
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool DailyScroll => DailyScrollLaunchers is { Count: > 0 };
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool DailyTenOfTenEnabled => DailyTenOfTenLaunchers is { Count: > 0 };
     public bool DailyFavorites { get; set; }
     public string StartTime { get; set; } = "";
     public RaidConfiguration Normal { get; set; } = new() { Name = "Raide 1" };

@@ -1,6 +1,7 @@
-<Page x:Class="Macro.Views.HomePage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{StaticResource CanvasBrush}" FontFamily="Segoe UI" FontSize="14" Title="Início">
+<Page x:Class="Macro.Views.HomePage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{StaticResource CanvasBrush}" FontFamily="{StaticResource PoppinsFont}" FontSize="14" Title="Início">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="28,24">
+            <TextBlock Text="OPERAÇÕES / VISÃO GERAL" FontSize="10" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,6" />
             <TextBlock Text="Início" Style="{StaticResource Heading}" />
             <TextBlock Text="Escolha um preset para executar o macro com as configurações salvas." Style="{StaticResource Caption}" />
             <Border Style="{StaticResource Card}" Margin="0,16,0,20">
@@ -19,7 +20,7 @@
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="Log de execução" FontWeight="SemiBold" Margin="0,0,0,10" />
-                    <TextBox x:Name="Log" IsReadOnly="True" TextWrapping="Wrap" Height="260" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" />
+                    <TextBox x:Name="Log" IsReadOnly="True" TextWrapping="Wrap" Height="260" VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource PoppinsFont}" />
                 </StackPanel>
             </Border>
         </StackPanel>

@@ -1,4 +1,4 @@
-<Page x:Class="Macro.Views.DailyPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Maps" Background="{StaticResource CanvasBrush}">
+<Page x:Class="Macro.Views.DailyPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Maps" Background="{StaticResource CanvasBrush}" FontFamily="{StaticResource PoppinsFont}">
     <StackPanel Margin="28,24">
         <TextBlock Text="Maps" Style="{StaticResource Heading}" />
         <TextBlock Text="Selecione o mapa e o item alvo." Style="{StaticResource Caption}" />

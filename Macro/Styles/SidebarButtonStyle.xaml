@@ -20,7 +20,7 @@
                 Value="#EBEADC"/>
 
 		<Setter Property="FontFamily"
-                Value="Segoe UI"/>
+                Value="{StaticResource PoppinsFont}"/>
 
 		<Setter Property="FontSize"
                 Value="16"/>

@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     private readonly Views.TimerPage _timerPage;
     private readonly Views.HomePage _homePage;
     private readonly Views.PresetsPage _presetsPage;
+    private readonly System.Windows.Threading.DispatcherTimer _sidebarRefresh = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow()
     {
@@ -24,6 +25,22 @@ public partial class MainWindow : Window
         _homePage = new Views.HomePage(_farmingPage);
         _presetsPage = new Views.PresetsPage();
         MainFrame.Navigate(_homePage);
+        _sidebarRefresh.Tick += (_, _) => RefreshSidebarActivity();
+        Loaded += (_, _) => { RefreshSidebarActivity(); _sidebarRefresh.Start(); };
+        Closed += (_, _) => _sidebarRefresh.Stop();
+    }
+
+    private void RefreshSidebarActivity()
+    {
+        SidebarRunStatus.Text = _farmingPage.RunStatus;
+        var lines = _farmingPage.RunLog.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var activity = lines.Length == 0 ? "Inicie um preset para acompanhar a execução aqui."
+            : string.Join(Environment.NewLine + Environment.NewLine, lines.TakeLast(5));
+        if (SidebarActivity.Text != activity)
+        {
+            SidebarActivity.Text = activity;
+            SidebarActivity.ScrollToEnd();
+        }
     }
 
     private void BtnHome_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_homePage);
@@ -49,15 +66,17 @@ public partial class MainWindow : Window
 
     private static void ActivateButton(Button button)
     {
-        button.Background = new SolidColorBrush(Color.FromRgb(0x49, 0x3E, 0x30));
-        button.BorderThickness = new Thickness(3, 0, 0, 0);
-        button.BorderBrush = new SolidColorBrush(Color.FromRgb(0xE4, 0xC1, 0x8A));
+        button.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x2D, 0x22));
+        button.BorderThickness = new Thickness(1);
+        button.BorderBrush = new SolidColorBrush(Color.FromRgb(0x70, 0x5B, 0x38));
+        button.Foreground = new SolidColorBrush(Color.FromRgb(0xED, 0xCF, 0x98));
     }
 
     private static void DeactivateButton(Button button)
     {
         button.Background = Brushes.Transparent;
-        button.BorderThickness = new Thickness(0);
+        button.BorderThickness = new Thickness(1);
         button.BorderBrush = Brushes.Transparent;
+        button.Foreground = new SolidColorBrush(Color.FromRgb(0xC9, 0xC9, 0xC3));
     }
 }

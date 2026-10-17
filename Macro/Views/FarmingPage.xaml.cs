@@ -133,8 +133,8 @@ public partial class FarmingPage : Page
                 item.SelectedMaps = item.SelectedMaps.Where(DailyMissionMaps.Contains)
                     .Distinct(StringComparer.OrdinalIgnoreCase).Where(assignedMaps.Add).Take(10).ToList();
             }
-            // Presets antigos compartilhavam os launchers da doação e do DailyScroll.
-            loaded.DailyScrollLaunchers ??= [.. loaded.DonationLaunchers];
+            // Cada rotina é ativada somente pela própria seleção de launchers.
+            loaded.DailyScrollLaunchers ??= [];
             loaded.DailyTenOfTenLaunchers ??= [];
             loaded.DailyTenOfTenLaunchers = loaded.DailyTenOfTenLaunchers
                 .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -361,109 +361,6 @@ public partial class FarmingPage : Page
         else if (!enabled) selection.RemoveAll(item => string.Equals(item, launcher, StringComparison.OrdinalIgnoreCase));
     }
 
-    private void DailyDonation_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not null)
-            AppendLog(Configuration.DailyDonation
-                ? "Doação diária ativada. Clique em Start para executar nos launchers selecionados."
-                : "Doação diária desativada.");
-    }
-
-    private void DailyScroll_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not null)
-            AppendLog(Configuration.DailyScroll
-                ? "DailyScroll ativado. Clique em Start para executar nos launchers selecionados."
-                : "DailyScroll desativado.");
-    }
-
-    private async void TestBackgroundKeys_Click(object sender, RoutedEventArgs e)
-    {
-        if (_runCancellation is not null)
-        {
-            AppendLog("Pare a rotina atual antes de testar o clique em segundo plano.");
-            return;
-        }
-
-        using var cancellation = new CancellationTokenSource();
-        _runCancellation = cancellation;
-        BtnBackgroundKeys.IsEnabled = false;
-        BtnStart.IsEnabled = false;
-        ConfigurationPanel.IsEnabled = false;
-        StatusText.Text = "Teste em segundo plano";
-        try
-        {
-            var target = _windowCaptureService.ListWindows()
-                .Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(window => window.StartedAt).FirstOrDefault()
-                ?? throw new InvalidOperationException("MIR4 Launcher 1 não encontrado.");
-            AppendLog($"Teste no MIR4 Launcher 1 (PID {target.ProcessId}): procurando o ícone + em segundo plano após 3 segundos. Stop cancela.");
-            await Task.Delay(3000, cancellation.Token);
-            await FindPlusInBackgroundAsync(target, cancellation.Token);
-        }
-        catch (OperationCanceledException) { AppendLog("Teste em segundo plano cancelado."); }
-        catch (Exception ex) { AppendLog($"Teste em segundo plano: {ex.Message}"); }
-        finally
-        {
-            _runCancellation = null;
-            BtnBackgroundKeys.IsEnabled = true;
-            BtnStart.IsEnabled = true;
-            ConfigurationPanel.IsEnabled = true;
-            StatusText.Text = "Pronto";
-        }
-    }
-
-    private async Task FindPlusInBackgroundAsync(PreviewWindow target, CancellationToken token)
-    {
-        var template = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "background-plus.png");
-        var region = new RelativeSearchRegion(0.7529, 0.0002, 0.2471, 0.1007);
-        var elapsed = System.Diagnostics.Stopwatch.StartNew();
-        OpenCvSharp.Rect? previous = null;
-        var stableMatches = 0;
-        var best = 0d;
-        while (elapsed.Elapsed < TimeSpan.FromSeconds(12))
-        {
-            token.ThrowIfCancellationRequested();
-            // Captura da própria janela, sem ativação, redimensionamento ou leitura da tela composta.
-            var frame = await _windowCaptureService.CaptureAsync(target, token, allowNon720p: true);
-            var result = await _templateSearchService.FindAsync(frame, template, region, 0.88, token,
-                new Int32Rect(17, 18, 29, 29));
-            ScreenshotImage.Source = result.AnnotatedFrame;
-            CaptureExpander.Header = "Detecção do ícone + em segundo plano";
-            CaptureExpander.IsExpanded = true;
-            best = Math.Max(best, result.Confidence);
-            var bounds = result.Bounds;
-            var stable = previous is { } last &&
-                Math.Abs(last.X + last.Width / 2d - bounds.X - bounds.Width / 2d) <= 4 &&
-                Math.Abs(last.Y + last.Height / 2d - bounds.Y - bounds.Height / 2d) <= 4;
-            stableMatches = result.Found ? (stable ? stableMatches + 1 : 1) : 0;
-            previous = result.Found ? bounds : null;
-            if (stableMatches >= 3)
-            {
-                var x = bounds.X + bounds.Width / 2;
-                var y = bounds.Y + bounds.Height / 2;
-                await _windowClickService.ClickBackgroundAsync(target, x, y, frame.PixelWidth, frame.PixelHeight, token);
-                AppendLog($"Ícone + detectado ({result.Confidence:0.00}). Teste por envio direto em X={x}, Y={y}; verificando a imagem após o clique.");
-                var absentFrames = 0;
-                for (var check = 0; check < 3; check++)
-                {
-                    await Task.Delay(350, token);
-                    var afterFrame = await _windowCaptureService.CaptureAsync(target, token, allowNon720p: true);
-                    var after = await _templateSearchService.FindAsync(afterFrame, template, region, 0.88, token,
-                        new Int32Rect(17, 18, 29, 29));
-                    ScreenshotImage.Source = after.AnnotatedFrame;
-                    if (!after.Found) absentFrames++;
-                }
-                AppendLog(absentFrames >= 2
-                    ? "O + deixou de aparecer nas capturas após o envio. Confira se o menu esperado abriu."
-                    : "O + continua visível. A ação no jogo não foi confirmada; ele pode ignorar cliques de mouse em segundo plano mesmo aceitando F9.");
-                return;
-            }
-            await Task.Delay(150, token);
-        }
-        AppendLog($"Ícone + não confirmado na região (melhor confiança {best:0.00}; mínimo 0,88). Nenhum clique enviado.");
-    }
-
     private async void BtnDoArena_Click(object sender, RoutedEventArgs e)
     {
         if (!int.TryParse(Configuration.ArenaRepeatCountText, NumberStyles.Integer,
@@ -483,6 +380,7 @@ public partial class FarmingPage : Page
         var cancellationToken = _runCancellation.Token;
         BtnDoArena.IsEnabled = false;
         ConfigurationPanel.IsEnabled = false;
+        ConfigurationExpander.IsExpanded = false;
         BtnStart.IsEnabled = false;
         StatusText.Text = "Em execução";
         try
@@ -672,6 +570,7 @@ public partial class FarmingPage : Page
         try
         {
             ConfigurationPanel.IsEnabled = false;
+            ConfigurationExpander.IsExpanded = false;
             if (scheduledStart is DateTime startAt)
             {
                 var delay = startAt - DateTime.Now;
@@ -794,7 +693,6 @@ public partial class FarmingPage : Page
         var warehouseRegion = new RelativeSearchRegion(0.6451, 0.7101, 0.1479, 0.2727);
         var donateButtonRegion = new RelativeSearchRegion(0.3425, 0.7912, 0.3399, 0.2088);
         const double confidenceThreshold = 0.82;
-        CaptureExpander.IsExpanded = true;
         FarmingScroll.ScrollToBottom();
         foreach (var launcher in Launchers.Where(Configuration.DonationLaunchers.Contains))
         {
@@ -1838,7 +1736,7 @@ public partial class FarmingPage : Page
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken, allowNon720p: true);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, 0.78,
                 cancellationToken);
-            ScreenshotImage.Source = result.AnnotatedFrame;
+            UpdateDetectionPreview(result);
             var stablePosition = previousMatch is { } previous &&
                 Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
                 Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
@@ -1886,7 +1784,7 @@ public partial class FarmingPage : Page
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, threshold,
                 cancellationToken, templateCrop);
-            ScreenshotImage.Source = result.AnnotatedFrame;
+            UpdateDetectionPreview(result);
             bestConfidence = Math.Max(bestConfidence, result.Confidence);
             var stablePosition = previousMatch is { } previous &&
                 Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
@@ -1951,7 +1849,7 @@ public partial class FarmingPage : Page
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, 0.78,
                 cancellationToken);
-            ScreenshotImage.Source = result.AnnotatedFrame;
+            UpdateDetectionPreview(result);
             var stablePosition = previousMatch is { } previous &&
                 Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
                 Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
@@ -1986,7 +1884,7 @@ public partial class FarmingPage : Page
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, threshold,
                 cancellationToken, templateCrop);
-            ScreenshotImage.Source = result.AnnotatedFrame;
+            UpdateDetectionPreview(result);
             bestConfidence = Math.Max(bestConfidence, result.Confidence);
             var stablePosition = previousMatch is { } previous &&
                 Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
@@ -2016,6 +1914,12 @@ public partial class FarmingPage : Page
         if (logFailure)
             AppendLog($"{targetName} não encontrado após {searchTime.Elapsed.TotalSeconds:0.0}s (melhor confiança {bestConfidence:0.00}; mínimo {threshold:0.00}). Nenhum clique enviado.");
         return false;
+    }
+
+    private void UpdateDetectionPreview(TemplateSearchResult result)
+    {
+        ScreenshotImage.Source = result.AnnotatedFrame;
+        DetectionStatusText.Text = $"{(result.Found ? "ENCONTRADO" : "BUSCANDO")}  /  Confiança: {result.Confidence:P0}  /  X={result.Bounds.X}, Y={result.Bounds.Y}";
     }
 
     private void AppendLog(string message)
@@ -2071,5 +1975,4 @@ public partial class FarmingPage : Page
         }
     }
 
-    private void BtnMousePercent_Click(object sender, RoutedEventArgs e) { }
 }
