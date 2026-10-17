@@ -492,7 +492,6 @@ public partial class FarmingPage : Page
         foreach (var name in steps)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            AppendLog($"DailyArena — starter: procurando {name}.");
             var clickCount = name == "botão 2" ? 4 : 1;
             var threshold = name switch
             {
@@ -663,6 +662,12 @@ public partial class FarmingPage : Page
         StatusText.Text = "Em execução";
     }
 
+    private async Task DelayRoutineStartAsync(string routine, CancellationToken cancellationToken)
+    {
+        AppendLog($"{routine}: aguardando 4 segundos antes de iniciar.");
+        await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+    }
+
     private async Task DailyDonate(CancellationToken cancellationToken)
     {
         if (Configuration.DonationLaunchers.Count == 0)
@@ -714,17 +719,18 @@ public partial class FarmingPage : Page
 
             try
             {
+                await DelayRoutineStartAsync($"Doação diária — {launcher}", cancellationToken);
                 AppendLog($"{launcher}: ajustando a área para 1280×720 e ativando {target.ProcessName} (PID {target.ProcessId}).");
                 await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x74, "F5", cancellationToken, AppendLog);
 
-                AppendLog($"{launcher}: doação aberta; procurando Armazém na segunda região.");
+                AppendLog($"{launcher}: menu de doação aberto.");
                 await Task.Delay(350, cancellationToken);
                 var warehouseClicked = await FindAndClickTemplateAsync(target, warehouseTemplatePath, warehouseRegion,
                     new Int32Rect(34, 48, 102, 103), "Armazém", confidenceThreshold, cancellationToken);
                 if (!warehouseClicked) continue;
 
-                AppendLog($"{launcher}: Armazém selecionado; procurando o botão Doar na terceira região.");
+                AppendLog($"{launcher}: Armazém selecionado.");
                 await Task.Delay(350, cancellationToken);
                 var donationMenuOpened = await FindAndClickTemplateAsync(target, donateButtonTemplatePath, donateButtonRegion,
                     null, "botão Doar", confidenceThreshold, cancellationToken);
@@ -749,7 +755,6 @@ public partial class FarmingPage : Page
                 foreach (var step in flowSteps)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AppendLog($"{launcher}: procurando {step.Name} na região X={step.Region.X:P2}, Y={step.Region.Y:P2}, {step.Region.Width:P2} × {step.Region.Height:P2}.");
                     var stepThreshold = step.Name switch
                     {
                         "Cobre" => 0.48,
@@ -831,6 +836,7 @@ public partial class FarmingPage : Page
 
             try
             {
+                await DelayRoutineStartAsync($"DailyScroll — {launcher}", cancellationToken);
                 AppendLog($"DailyScroll — {launcher}: ajustando para 1280×720 e iniciando com F10.");
                 await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
@@ -840,14 +846,13 @@ public partial class FarmingPage : Page
                 foreach (var step in steps)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AppendLog($"DailyScroll — {launcher}: procurando {step.Name} em X={step.Region.X:P2}, Y={step.Region.Y:P2}, {step.Region.Width:P2} × {step.Region.Height:P2}.");
-                    // Recorta apenas o texto fixo do cartão para ignorar a quantidade variável.
+                    // O ícone é fixo; a quantidade do item varia conforme o inventário.
                     Int32Rect? crop = step.Name == "pergaminho de deslocamento rápido"
-                        ? new Int32Rect(136, 17, 174, 50)
+                        ? new Int32Rect(22, 22, 48, 48)
                         : null;
                     var threshold = step.Name switch
                     {
-                        "pergaminho de deslocamento rápido" => 0.65,
+                        "pergaminho de deslocamento rápido" => 0.70,
                         "Comprar" => 0.70,
                         _ => 0.78
                     };
@@ -869,7 +874,6 @@ public partial class FarmingPage : Page
                                 await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
                             }
 
-                            AppendLog($"DailyScroll — {launcher}: procurando o botão Comprar por até 4 segundos (tentativa {attempt + 1}/3).");
                             found = await FindAndClickTemplateAsync(target, step.Template, step.Region, crop,
                                 step.Name, threshold, cancellationToken, step.ClickX, step.ClickY,
                                 timeoutOverride: TimeSpan.FromSeconds(4), clickCount: 3);
@@ -891,9 +895,8 @@ public partial class FarmingPage : Page
 
                 if (sequenceCompleted)
                 {
-                    AppendLog($"DailyScroll — {launcher}: procurando o item por rolagem na região X={scrollListRegion.X:P2}, Y={scrollListRegion.Y:P2}, {scrollListRegion.Width:P2} × {scrollListRegion.Height:P2}.");
                     var targetFound = await FindWhileScrollingAsync(target, targetTemplate, scrollListRegion,
-                        "item DailyScroll", 0.78, cancellationToken);
+                        "item DailyScroll", 0.70, cancellationToken, new Int32Rect(22, 22, 48, 48));
                     if (targetFound)
                     {
                         await Task.Delay(350, cancellationToken);
@@ -903,7 +906,6 @@ public partial class FarmingPage : Page
                         if (fiveSelected)
                         {
                             await Task.Delay(300, cancellationToken);
-                            AppendLog($"DailyScroll — {launcher}: procurando 150K Comprar em X={buy150kRegion.X:P2}, Y={buy150kRegion.Y:P2}, {buy150kRegion.Width:P2} × {buy150kRegion.Height:P2}.");
                             await FindAndClickTemplateAsync(target, buy150kTemplate, buy150kRegion, null,
                                 "150K Comprar", 0.78, cancellationToken);
                         }
@@ -988,6 +990,7 @@ public partial class FarmingPage : Page
 
             try
             {
+                await DelayRoutineStartAsync($"Missões favoritas — {launcher}", cancellationToken);
                 AppendLog($"Missões favoritas — {launcher}: ajustando a área para 1280×720 e pressionando F6.");
                 await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x75, "F6", cancellationToken, AppendLog);
@@ -1005,7 +1008,7 @@ public partial class FarmingPage : Page
                     AppendLog($"Missões favoritas — {launcher}: falta a imagem de referência do mapa '{selectedMap}'.");
                     continue;
                 }
-                AppendLog($"Missões favoritas — {launcher}: selecionado o mapa {selectedMap}; buscando sua imagem de entrada.");
+                AppendLog($"Missões favoritas — {launcher}: mapa {selectedMap} selecionado.");
                 // Compara somente o nome; exclui o contador variável, inclusive a linha (3) da Miragem.
                 Int32Rect? mapCrop = selectedMap switch
                 {
@@ -1024,25 +1027,23 @@ public partial class FarmingPage : Page
                 var totalScrolls = 0;
                 const int maxEmptyScrolls = 5;
                 const int maxMissionScrolls = 60;
-                AppendLog($"Missões favoritas — {launcher}: procurando e aceitando missões enquanto rola a lista.");
                 while (emptyScrolls < maxEmptyScrolls && totalScrolls < maxMissionScrolls)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     await Task.Delay(150, cancellationToken);
                     var attemptName = $"Aceitar missão ({acceptedCount + 1})";
-                    AppendLog($"Missões favoritas — {launcher}: procurando outro botão Aceitar missão.");
                     var accepted = await FindAndClickTemplateAsync(target, acceptTemplate, acceptRegion,
                         new Int32Rect(12, 17, 112, 34),
-                        attemptName, 0.72, cancellationToken, timeoutOverride: TimeSpan.FromSeconds(0.8));
+                        attemptName, 0.72, cancellationToken, timeoutOverride: TimeSpan.FromSeconds(0.8),
+                        logFailure: false);
                     if (!accepted)
                     {
                         emptyScrolls++;
-                        AppendLog($"Missões favoritas — {launcher}: botão não encontrado; rolando a lista ({emptyScrolls}/{maxEmptyScrolls}).");
                         if (emptyScrolls < maxEmptyScrolls)
                         {
                             await _windowClickService.ScrollDownAtRelativeAsync(target,
                                 acceptRegion.X + acceptRegion.Width / 2, acceptRegion.Y + acceptRegion.Height / 2,
-                                cancellationToken, AppendLog, notches: 5);
+                                cancellationToken, notches: 5);
                             totalScrolls++;
                             await Task.Delay(100, cancellationToken);
                         }
@@ -1078,14 +1079,14 @@ public partial class FarmingPage : Page
                 foreach (var step in favoriteSteps)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AppendLog($"Missões favoritas — {launcher}: procurando {step.Name} em X={step.Region.X:P2}, Y={step.Region.Y:P2}, {step.Region.Width:P2} × {step.Region.Height:P2}.");
                     Int32Rect? crop = step.Name == "item Deslocamento rápido"
-                        ? new Int32Rect(104, 14, 91, 26)
+                        ? new Int32Rect(7, 9, 32, 34)
                         : null;
                     var threshold = step.Name switch
                     {
-                        "Deslocamento rápido" => 0.65,
+                        "Deslocamento rápido" => 0.70,
                         "Jogar autom." => 0.72,
+                        "item Deslocamento rápido" => 0.70,
                         _ => 0.78
                     };
                     var completed = await FindAndClickTemplateAsync(target, step.Template, step.Region, crop,
@@ -1110,7 +1111,6 @@ public partial class FarmingPage : Page
                     await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
                     await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
                     await Task.Delay(350, cancellationToken);
-                    AppendLog($"Missões favoritas — {launcher}: procurando Poupança de energia em X={energyRegion.X:P2}, Y={energyRegion.Y:P2}, {energyRegion.Width:P2} × {energyRegion.Height:P2}.");
                     var energySelected = await FindAndClickTemplateAsync(target, energyTemplate, energyRegion, null,
                         "Poupança de energia", 0.78, cancellationToken);
                     if (!energySelected)
@@ -1154,12 +1154,11 @@ public partial class FarmingPage : Page
         {
             (mapIconTemplate, new(0.5940, 0.1746, 0.0940, 0.1007), null, "ícone do mapa"),
             (pickaxeTemplate, new(0.2955, 0.1034, 0.4035, 0.7271), null, "ícone de picareta"),
-            (travelItemTemplate, new(0.2969, 0.8330, 0.4090, 0.1449), new Int32Rect(104, 14, 91, 26), "item Deslocamento rápido")
+            (travelItemTemplate, new(0.2969, 0.8330, 0.4090, 0.1449), new Int32Rect(7, 9, 32, 34), "item Deslocamento rápido")
         };
         foreach (var step in steps)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            AppendLog($"Missões favoritas — {launcher}: procurando {step.Name} em X={step.Region.X:P2}, Y={step.Region.Y:P2}, {step.Region.Width:P2} × {step.Region.Height:P2}.");
             var found = await FindAndClickTemplateAsync(target, step.Template, step.Region, step.Crop,
                 step.Name, 0.72, cancellationToken);
             if (!found)
@@ -1174,7 +1173,6 @@ public partial class FarmingPage : Page
         await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
         await Task.Delay(350, cancellationToken);
         var energyRegion = new RelativeSearchRegion(0.1490, 0.6585, 0.1133, 0.1695);
-        AppendLog($"Missões favoritas — {launcher}: procurando Poupança de energia em X={energyRegion.X:P2}, Y={energyRegion.Y:P2}, {energyRegion.Width:P2} × {energyRegion.Height:P2}.");
         var energySelected = await FindAndClickTemplateAsync(target, energyIconTemplate, energyRegion, null,
             "ícone de Poupança de energia", 0.72, cancellationToken);
         if (!energySelected)
@@ -1296,11 +1294,14 @@ public partial class FarmingPage : Page
         AppendLog($"DailyFavoriteRaid: criando {raidCount} raide(s) pelo starter {launcherGroup.Starter}.");
         try
         {
+            await DelayRoutineStartAsync($"DailyFavoriteRaid — {launcherGroup.Starter}", cancellationToken);
             await PrepareRoutineWindowAsync(starter, cancellationToken);
             for (var raid = 1; raid <= raidCount; raid++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 AppendLog($"DailyFavoriteRaid — {launcherGroup.Starter}: iniciando raide {raid}/{raidCount}.");
+                if (raid > 1)
+                    await DelayRoutineStartAsync($"DailyFavoriteRaid — raide {raid}/{raidCount}", cancellationToken);
                 AppendLog($"DailyFavoriteRaid — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.");
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
@@ -1309,7 +1310,6 @@ public partial class FarmingPage : Page
                 foreach (var name in steps)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AppendLog($"DailyFavoriteRaid — raide {raid}/{raidCount}: procurando {name}.");
                     var clicks = name == "botão 2" ? 4 : 1;
                     var threshold = name switch
                     {
@@ -1449,11 +1449,14 @@ public partial class FarmingPage : Page
         AppendLog($"DailyRaidBoss: criando {raidCount} raide(s) pelo starter {launcherGroup.Starter}.");
         try
         {
+            await DelayRoutineStartAsync($"DailyRaidBoss — {launcherGroup.Starter}", cancellationToken);
             await PrepareRoutineWindowAsync(starter, cancellationToken);
             for (var raid = 1; raid <= raidCount; raid++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 AppendLog($"DailyRaidBoss — {launcherGroup.Starter}: iniciando raide {raid}/{raidCount}.");
+                if (raid > 1)
+                    await DelayRoutineStartAsync($"DailyRaidBoss — raide {raid}/{raidCount}", cancellationToken);
                 AppendLog($"DailyRaidBoss — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.");
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
@@ -1461,7 +1464,6 @@ public partial class FarmingPage : Page
                 foreach (var name in new[] { "ícone Raide", "Raide de Boss", "Criar um Raide (menu)", "Criar um Raide", "adicionar convidados", "Convidar todos" })
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AppendLog($"DailyRaidBoss — raide {raid}/{raidCount}: procurando {name}.");
                     var threshold = name switch
                     {
                         "adicionar convidados" => 0.50,
@@ -1524,7 +1526,7 @@ public partial class FarmingPage : Page
     private async Task WaitAndClickTemplateIndefinitelyAsync(PreviewWindow target, string templatePath,
         RelativeSearchRegion region, CancellationToken cancellationToken, string routineName = "DailyFavoriteRaid")
     {
-        AppendLog($"{routineName} — aguardando o botão OK sem limite de tempo na região X={region.X:P2}, Y={region.Y:P2}, {region.Width:P2} × {region.Height:P2}. Use Stop para cancelar.");
+        AppendLog($"{routineName} — aguardando confirmação. Use Stop para cancelar.");
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var lastReport = TimeSpan.Zero;
         var consecutiveMatches = 0;
@@ -1533,7 +1535,8 @@ public partial class FarmingPage : Page
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
+            // O monitor permanece ativo com a janela reduzida; suas regiões são relativas à resolução atual.
+            var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken, allowNon720p: true);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, 0.78,
                 cancellationToken);
             ScreenshotImage.Source = result.AnnotatedFrame;
@@ -1549,14 +1552,14 @@ public partial class FarmingPage : Page
                 var clickY = result.Bounds.Y + result.Bounds.Height / 2d;
                 AppendLog($"{routineName}: OK confirmado ({result.Confidence:0.00}); movendo o mouse e clicando.");
                 var click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
-                    clickY / frame.PixelHeight, cancellationToken, AppendLog);
+                    clickY / frame.PixelHeight, cancellationToken);
                 AppendLog($"{routineName}: clique em OK enviado em X={click.X}, Y={click.Y}; Windows aceitou a entrada.");
                 return;
             }
 
-            if (watch.Elapsed - lastReport >= TimeSpan.FromSeconds(10))
+            if (watch.Elapsed - lastReport >= TimeSpan.FromMinutes(1))
             {
-                AppendLog($"{routineName}: OK ainda não apareceu ({watch.Elapsed.TotalMinutes:0} min; melhor confiança recente {result.Confidence:0.00}/0.78).");
+                AppendLog($"{routineName}: confirmação ainda pendente ({watch.Elapsed.TotalMinutes:0} min).");
                 lastReport = watch.Elapsed;
             }
             await Task.Delay(250, cancellationToken);
@@ -1564,7 +1567,8 @@ public partial class FarmingPage : Page
     }
 
     private async Task<bool> FindWhileScrollingAsync(PreviewWindow target, string templatePath,
-        RelativeSearchRegion region, string targetName, double threshold, CancellationToken cancellationToken)
+        RelativeSearchRegion region, string targetName, double threshold, CancellationToken cancellationToken,
+        Int32Rect? templateCrop = null)
     {
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var consecutiveMatches = 0;
@@ -1578,7 +1582,8 @@ public partial class FarmingPage : Page
         {
             cancellationToken.ThrowIfCancellationRequested();
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
-            var result = await _templateSearchService.FindAsync(frame, templatePath, region, threshold, cancellationToken);
+            var result = await _templateSearchService.FindAsync(frame, templatePath, region, threshold,
+                cancellationToken, templateCrop);
             ScreenshotImage.Source = result.AnnotatedFrame;
             bestConfidence = Math.Max(bestConfidence, result.Confidence);
             var stablePosition = previousMatch is { } previous &&
@@ -1586,15 +1591,13 @@ public partial class FarmingPage : Page
                 Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
             consecutiveMatches = result.Found ? (stablePosition ? consecutiveMatches + 1 : 1) : 0;
             previousMatch = result.Found ? result.Bounds : null;
-            AppendLog($"DailyScroll — PID {target.ProcessId}, {targetName}: confiança {result.Confidence:0.00}/{threshold:0.00}, confirmação {consecutiveMatches}/3, rolagens {scrollCount}.");
-
             if (consecutiveMatches >= 3)
             {
-                var clickX = Math.Min(result.Bounds.X + result.Bounds.Width * 1.20, frame.PixelWidth - 1);
-                var clickY = Math.Clamp(result.Bounds.Y + result.Bounds.Height / 2d, 0, frame.PixelHeight - 1);
-                AppendLog($"{targetName} encontrado após {scrollCount} rolagens; clicando cerca de 20% da largura além da borda direita do item.");
+                var clickX = result.Bounds.X + result.Bounds.Width / 2d;
+                var clickY = result.Bounds.Y + result.Bounds.Height / 2d;
+                AppendLog($"{targetName} encontrado após {scrollCount} rolagens; selecionando pelo ícone.");
                 var click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
-                    clickY / frame.PixelHeight, cancellationToken, AppendLog);
+                    clickY / frame.PixelHeight, cancellationToken);
                 AppendLog($"Windows aceitou o clique do item em X={click.X}, Y={click.Y}.");
                 return true;
             }
@@ -1604,7 +1607,7 @@ public partial class FarmingPage : Page
                 var nearTarget = result.Confidence >= threshold - 0.18;
                 var notches = nearTarget ? 1 : 2;
                 await _windowClickService.ScrollDownAtRelativeAsync(target, scrollX, scrollY,
-                    cancellationToken, AppendLog, notches);
+                    cancellationToken, notches: notches);
                 scrollCount++;
             }
             var nearTargetNow = result.Confidence >= threshold - 0.18;
@@ -1654,7 +1657,7 @@ public partial class FarmingPage : Page
     private async Task<bool> FindAndClickTemplateAsync(PreviewWindow target, string templatePath,
         RelativeSearchRegion region, Int32Rect? templateCrop, string targetName, double threshold,
         CancellationToken cancellationToken, double? clickAnchorX = null, double? clickAnchorY = null,
-        TimeSpan? timeoutOverride = null, int clickCount = 1)
+        TimeSpan? timeoutOverride = null, int clickCount = 1, bool logFailure = true)
     {
         var searchTime = System.Diagnostics.Stopwatch.StartNew();
         var consecutiveMatches = 0;
@@ -1675,8 +1678,6 @@ public partial class FarmingPage : Page
                 Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
             consecutiveMatches = result.Found ? (stablePosition ? consecutiveMatches + 1 : 1) : 0;
             previousMatch = result.Found ? result.Bounds : null;
-            AppendLog($"PID {target.ProcessId}, {targetName}: confiança {result.Confidence:0.00}/{threshold:0.00}, confirmação {consecutiveMatches}/3 ({searchTime.Elapsed.TotalSeconds:0.0}s).");
-
             if (consecutiveMatches >= 3)
             {
                 var clickX = result.Bounds.X + result.Bounds.Width * (clickAnchorX ?? 0.5);
@@ -1687,7 +1688,7 @@ public partial class FarmingPage : Page
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
-                        clickY / frame.PixelHeight, cancellationToken, AppendLog);
+                        clickY / frame.PixelHeight, cancellationToken);
                     AppendLog($"{target.ProcessName} (PID {target.ProcessId}): Windows aceitou clique {press}/{clickCount} em X={click.X}, Y={click.Y} da tela.");
                     if (press < clickCount) await Task.Delay(180, cancellationToken);
                 }
@@ -1697,7 +1698,8 @@ public partial class FarmingPage : Page
             await Task.Delay(100, cancellationToken);
         }
 
-        AppendLog($"{target.ProcessName} (PID {target.ProcessId}), {targetName}: busca encerrada após {searchTime.Elapsed.TotalSeconds:0.0}s sem 3 confirmações consecutivas. Melhor confiança: {bestConfidence:0.00}; mínimo: {threshold:0.00}. Região pesquisada: X={region.X:P2}, Y={region.Y:P2}, {region.Width:P2} × {region.Height:P2}. Nenhum clique foi enviado.");
+        if (logFailure)
+            AppendLog($"{targetName} não encontrado após {searchTime.Elapsed.TotalSeconds:0.0}s (melhor confiança {bestConfidence:0.00}; mínimo {threshold:0.00}). Nenhum clique enviado.");
         return false;
     }
 

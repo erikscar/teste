@@ -32,10 +32,11 @@ public sealed class WindowPreviewService
         return windows.OrderBy(w => w.Label).ToArray();
     }
 
-    public Task<BitmapSource> CaptureAsync(PreviewWindow target, CancellationToken token) =>
-        Task.Run(() => Capture(target, token), token);
+    public Task<BitmapSource> CaptureAsync(PreviewWindow target, CancellationToken token,
+        bool allowNon720p = false) =>
+        Task.Run(() => Capture(target, token, allowNon720p), token);
 
-    private static BitmapSource Capture(PreviewWindow target, CancellationToken token)
+    private static BitmapSource Capture(PreviewWindow target, CancellationToken token, bool allowNon720p)
     {
         token.ThrowIfCancellationRequested();
         GetWindowThreadProcessId(target.Handle, out var processId);
@@ -51,7 +52,7 @@ public sealed class WindowPreviewService
         {
             if (!GetClientRect(target.Handle, out var rect) || rect.Right <= 0 || rect.Bottom <= 0)
                 throw new InvalidOperationException("A janela não possui área cliente disponível.");
-            if (rect.Right != 1280 || rect.Bottom != 720)
+            if (!allowNon720p && (rect.Right != 1280 || rect.Bottom != 720))
                 throw new InvalidOperationException("A captura exige que a área do jogo esteja em 1280 × 720. Capture novamente para redefinir a janela.");
             source = GetDC(0);
             if (source == 0) throw new InvalidOperationException("Não foi possível acessar a tela.");
