@@ -1,8 +1,8 @@
-<Window x:Class="Macro.Views.WindowPreview"
+<Page x:Class="Macro.Views.CaptureTestPage"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Teste de captura e busca" Width="980" Height="780" MinWidth="680" MinHeight="540"
-        Background="{StaticResource CanvasBrush}" WindowStartupLocation="CenterOwner" FontFamily="{StaticResource PoppinsFont}">
+        Title="Teste de captura e busca"
+        Background="{StaticResource CanvasBrush}" FontFamily="{StaticResource PoppinsFont}">
     <Grid Margin="18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
@@ -47,4 +47,4 @@
         <TextBox Grid.Row="4" x:Name="Log" IsReadOnly="True" TextWrapping="Wrap"
                  VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"/>
     </Grid>
-</Window>
+</Page>

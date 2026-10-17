@@ -9,23 +9,21 @@ using System.Windows.Input;
 
 namespace Macro.Views;
 
-public partial class WindowPreview : Window
+public partial class CaptureTestPage : Page
 {
     private readonly WindowPreviewService _service = new();
     private readonly TemplateSearchService _vision = new();
     private readonly WindowClickService _input = new();
     private readonly CancellationTokenSource _lifetime = new();
-    private bool _closed;
     private bool _selectingRegion;
     private Point _selectionStartPixel;
     private Rect? _selectedPixelRegion;
 
-    public WindowPreview()
+    public CaptureTestPage()
     {
         InitializeComponent();
         Loaded += (_, _) => RefreshWindows();
         Preview.SizeChanged += (_, _) => RedrawSelection();
-        Closed += (_, _) => { _closed = true; _lifetime.Cancel(); _lifetime.Dispose(); };
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshWindows();
@@ -37,7 +35,7 @@ public partial class WindowPreview : Window
             Title = "Escolha a imagem que deseja localizar",
             Filter = "Imagens|*.png;*.bmp;*.jpg;*.jpeg|Todos os arquivos|*.*"
         };
-        if (dialog.ShowDialog(this) == true) TemplatePath.Text = dialog.FileName;
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true) TemplatePath.Text = dialog.FileName;
     }
 
     private void RefreshWindows()
@@ -68,16 +66,15 @@ public partial class WindowPreview : Window
         {
             await _input.Ensure720pAsync(target, _lifetime.Token);
             var image = await _service.CaptureAsync(target, _lifetime.Token);
-            if (_closed) return;
             Preview.Source = image;
             ClearSelection();
             WriteLog($"Captura: {image.PixelWidth} × {image.PixelHeight} pixels. {target.Label}");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!_closed) WriteLog(ex.Message); }
+        catch (Exception ex) { WriteLog(ex.Message); }
         finally
         {
-            if (!_closed) CaptureButton.IsEnabled = RefreshButton.IsEnabled = WindowList.IsEnabled = true;
+            CaptureButton.IsEnabled = RefreshButton.IsEnabled = WindowList.IsEnabled = true;
         }
     }
 
@@ -164,8 +161,8 @@ public partial class WindowPreview : Window
             else WriteLog("Não foi possível capturar a janela dentro do tempo limite.");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!_closed) WriteLog(ex.Message); }
-        finally { if (!_closed) SetBusy(false); }
+        catch (Exception ex) { WriteLog(ex.Message); }
+        finally { SetBusy(false); }
     }
 
     private static bool TryPercent(string text, out double value) =>

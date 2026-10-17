@@ -12,6 +12,15 @@ namespace Macro.Views;
 
 public partial class FarmingPage : Page
 {
+    private void RoutineInfo_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.ToolTip is ToolTip tip)
+        {
+            tip.PlacementTarget = button;
+            tip.IsOpen = true;
+        }
+    }
+
     private int _normalRaidImageIndex;
     private int _bossRaidImageIndex;
     private CancellationTokenSource? _runCancellation;
@@ -221,11 +230,6 @@ public partial class FarmingPage : Page
             new DoubleAnimation(0.25, 1, duration) { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
         translation.BeginAnimation(TranslateTransform.XProperty,
             new DoubleAnimation(direction * 18, 0, duration) { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
-    }
-
-    private void PreviewWindow_Click(object sender, RoutedEventArgs e)
-    {
-        new WindowPreview { Owner = Window.GetWindow(this) }.ShowDialog();
     }
 
     // A interface permanece pronta para receber uma nova implementação.
