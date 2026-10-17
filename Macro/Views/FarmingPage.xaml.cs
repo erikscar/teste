@@ -377,6 +377,93 @@ public partial class FarmingPage : Page
                 : "DailyScroll desativado.");
     }
 
+    private async void TestBackgroundKeys_Click(object sender, RoutedEventArgs e)
+    {
+        if (_runCancellation is not null)
+        {
+            AppendLog("Pare a rotina atual antes de testar o clique em segundo plano.");
+            return;
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        _runCancellation = cancellation;
+        BtnBackgroundKeys.IsEnabled = false;
+        BtnStart.IsEnabled = false;
+        ConfigurationPanel.IsEnabled = false;
+        StatusText.Text = "Teste em segundo plano";
+        try
+        {
+            var target = _windowCaptureService.ListWindows()
+                .Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(window => window.StartedAt).FirstOrDefault()
+                ?? throw new InvalidOperationException("MIR4 Launcher 1 não encontrado.");
+            AppendLog($"Teste no MIR4 Launcher 1 (PID {target.ProcessId}): procurando o ícone + em segundo plano após 3 segundos. Stop cancela.");
+            await Task.Delay(3000, cancellation.Token);
+            await FindPlusInBackgroundAsync(target, cancellation.Token);
+        }
+        catch (OperationCanceledException) { AppendLog("Teste em segundo plano cancelado."); }
+        catch (Exception ex) { AppendLog($"Teste em segundo plano: {ex.Message}"); }
+        finally
+        {
+            _runCancellation = null;
+            BtnBackgroundKeys.IsEnabled = true;
+            BtnStart.IsEnabled = true;
+            ConfigurationPanel.IsEnabled = true;
+            StatusText.Text = "Pronto";
+        }
+    }
+
+    private async Task FindPlusInBackgroundAsync(PreviewWindow target, CancellationToken token)
+    {
+        var template = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "background-plus.png");
+        var region = new RelativeSearchRegion(0.7529, 0.0002, 0.2471, 0.1007);
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        OpenCvSharp.Rect? previous = null;
+        var stableMatches = 0;
+        var best = 0d;
+        while (elapsed.Elapsed < TimeSpan.FromSeconds(12))
+        {
+            token.ThrowIfCancellationRequested();
+            // Captura da própria janela, sem ativação, redimensionamento ou leitura da tela composta.
+            var frame = await _windowCaptureService.CaptureAsync(target, token, allowNon720p: true);
+            var result = await _templateSearchService.FindAsync(frame, template, region, 0.88, token,
+                new Int32Rect(17, 18, 29, 29));
+            ScreenshotImage.Source = result.AnnotatedFrame;
+            CaptureExpander.Header = "Detecção do ícone + em segundo plano";
+            CaptureExpander.IsExpanded = true;
+            best = Math.Max(best, result.Confidence);
+            var bounds = result.Bounds;
+            var stable = previous is { } last &&
+                Math.Abs(last.X + last.Width / 2d - bounds.X - bounds.Width / 2d) <= 4 &&
+                Math.Abs(last.Y + last.Height / 2d - bounds.Y - bounds.Height / 2d) <= 4;
+            stableMatches = result.Found ? (stable ? stableMatches + 1 : 1) : 0;
+            previous = result.Found ? bounds : null;
+            if (stableMatches >= 3)
+            {
+                var x = bounds.X + bounds.Width / 2;
+                var y = bounds.Y + bounds.Height / 2;
+                await _windowClickService.ClickBackgroundAsync(target, x, y, frame.PixelWidth, frame.PixelHeight, token);
+                AppendLog($"Ícone + detectado ({result.Confidence:0.00}). Teste por envio direto em X={x}, Y={y}; verificando a imagem após o clique.");
+                var absentFrames = 0;
+                for (var check = 0; check < 3; check++)
+                {
+                    await Task.Delay(350, token);
+                    var afterFrame = await _windowCaptureService.CaptureAsync(target, token, allowNon720p: true);
+                    var after = await _templateSearchService.FindAsync(afterFrame, template, region, 0.88, token,
+                        new Int32Rect(17, 18, 29, 29));
+                    ScreenshotImage.Source = after.AnnotatedFrame;
+                    if (!after.Found) absentFrames++;
+                }
+                AppendLog(absentFrames >= 2
+                    ? "O + deixou de aparecer nas capturas após o envio. Confira se o menu esperado abriu."
+                    : "O + continua visível. A ação no jogo não foi confirmada; ele pode ignorar cliques de mouse em segundo plano mesmo aceitando F9.");
+                return;
+            }
+            await Task.Delay(150, token);
+        }
+        AppendLog($"Ícone + não confirmado na região (melhor confiança {best:0.00}; mínimo 0,88). Nenhum clique enviado.");
+    }
+
     private async void BtnDoArena_Click(object sender, RoutedEventArgs e)
     {
         if (!int.TryParse(Configuration.ArenaRepeatCountText, NumberStyles.Integer,
@@ -607,6 +694,7 @@ public partial class FarmingPage : Page
                 {
                     case "Doação diária" when Configuration.DailyDonation: await DailyDonate(cancellationToken); break;
                     case "Pergaminho diário" when Configuration.DailyScroll: await DailyScroll(cancellationToken); break;
+                    case "Diárias 10/10" when Configuration.DailyTenOfTenEnabled: await DailyTenOfTen(cancellationToken); break;
                     case "Raids normais" when Configuration.Normal.IsEnabled: await DailyFavoriteRaid(cancellationToken); break;
                     case "Boss" when Configuration.Boss.IsEnabled: await DailyRaidBoss(cancellationToken); break;
                     case "Missões favoritas" when Configuration.DailyFavoriteLaunchers is { Count: > 0 }:
@@ -625,7 +713,7 @@ public partial class FarmingPage : Page
                         break;
                 }
             }
-            if (!Configuration.DailyDonation && !Configuration.DailyScroll &&
+            if (!Configuration.DailyDonation && !Configuration.DailyScroll && !Configuration.DailyTenOfTenEnabled &&
                 Configuration.DailyFavoriteLaunchers is not { Count: > 0 } &&
                 !Configuration.Normal.IsEnabled && !Configuration.Boss.IsEnabled && !Configuration.ArenaEnabled)
                 AppendLog("Nenhuma rotina diária está ativada; nenhuma ação executada.");
@@ -821,7 +909,7 @@ public partial class FarmingPage : Page
         {
             (mapTemplate, firstRegion, "ícone de mapa", null, null),
             (currencyTemplate, secondRegion, "ícone dourado", null, null),
-            (itemTemplate, thirdRegion, "pergaminho de deslocamento rápido", null, null),
+            (itemTemplate, thirdRegion, "pergaminho de deslocamento rápido", 0.70, null),
             (buyTemplate, buyButtonRegion, "Comprar", null, null)
         };
 
@@ -896,7 +984,7 @@ public partial class FarmingPage : Page
                 if (sequenceCompleted)
                 {
                     var targetFound = await FindWhileScrollingAsync(target, targetTemplate, scrollListRegion,
-                        "item DailyScroll", 0.70, cancellationToken, new Int32Rect(22, 22, 48, 48));
+                        "item DailyScroll", 0.70, cancellationToken, new Int32Rect(22, 22, 48, 48), clickRightMargin: 0.20);
                     if (targetFound)
                     {
                         await Task.Delay(350, cancellationToken);
@@ -926,6 +1014,218 @@ public partial class FarmingPage : Page
                         await _windowClickService.PressEscapeTimesAsync(target, 3, CancellationToken.None, AppendLog);
                     }
                     catch (Exception ex) { AppendLog($"DailyScroll — {launcher}: não foi possível enviar Esc — {ex.Message}"); }
+                }
+            }
+        }
+    }
+
+    private async Task DailyTenOfTen(CancellationToken cancellationToken)
+    {
+        if (Configuration.DailyTenOfTenLaunchers is not { Count: > 0 })
+        {
+            AppendLog("Diárias 10/10: selecione pelo menos um launcher.");
+            return;
+        }
+
+        var directory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "DailyTenOfTen");
+        var steps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("01-crafting.png", "ícone de criação", new(0.7570, 0.2090, 0.0829, 0.1572)),
+            ("02-create-menu.png", "menu Criar", new(0.6603, 0.3539, 0.0953, 0.0712)),
+            ("03-create-material.png", "Criar Material", new(0.2568, 0.0027, 0.1603, 0.0860)),
+            ("04-equipment-material.png", "Material de Equipamento", new(0.1407, 0.0813, 0.0995, 0.0860)),
+            ("05-rare.png", "Raro", new(0.0026, 0.4841, 0.1023, 0.0933)),
+            ("06-create-button.png", "botão Criar", new(0.8109, 0.8723, 0.1658, 0.1204))
+        };
+        var enchantSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("07-enchant-menu.png", "menu Encantar", new(0.0122, 0.3859, 0.1202, 0.0983)),
+            ("08-enchant-button.png", "primeiro botão Encantar", new(0.7625, 0.8428, 0.2280, 0.1474)),
+            ("09-enchant-confirm.png", "segundo botão Encantar", new(0.3397, 0.8600, 0.2239, 0.1302)),
+            ("10-close.png", "fechar encantamento", new(0.9159, 0.0149, 0.0841, 0.1081)),
+            ("11-ok.png", "OK do encantamento", new(0.4945, 0.6094, 0.1589, 0.1204))
+        };
+        var travelSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("12-map.png", "ícone de localização", new(0.6064, 0.1648, 0.0705, 0.1130)),
+            ("13-green-icon.png", "ícone verde", new(0.3107, 0.2557, 0.0940, 0.1179)),
+            ("14-fast-travel.png", "Deslocamento rápido", new(0.2969, 0.8354, 0.2128, 0.1327))
+        };
+        var herbSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("15-herb-map.png", "localização para ervas", new(0.6078, 0.1574, 0.0663, 0.1228)),
+            ("16-herb-icon.png", "ícone de ervas", new(0.3231, 0.3834, 0.0705, 0.1105)),
+            ("17-herb-travel.png", "Deslocamento rápido para ervas", new(0.2996, 0.8330, 0.2114, 0.1302))
+        };
+        var miningSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("18-mining-map.png", "localização para minério", new(0.6105, 0.1672, 0.0663, 0.1056)),
+            ("19-mining-icon.png", "ícone de mineração", new(0.3314, 0.5087, 0.0567, 0.1056)),
+            ("20-mining-travel.png", "Deslocamento rápido para minério", new(0.2913, 0.8280, 0.2197, 0.1498))
+        };
+        foreach (var step in steps.Concat(enchantSteps).Concat(travelSteps).Concat(herbSteps).Concat(miningSteps))
+            if (!File.Exists(Path.Combine(directory, step.Image)))
+                throw new FileNotFoundException($"Diárias 10/10: falta a imagem de {step.Name}.", Path.Combine(directory, step.Image));
+
+        var windows = _windowCaptureService.ListWindows();
+        var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(window => window.StartedAt).ToArray();
+        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
+        if (clients.Length > 0) targets["MIR4 Launcher 1"] = clients[0];
+        if (clients.Length > 1) targets["MIR4 Launcher 2"] = clients[1];
+        var steam = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
+        if (steam is not null) targets["MIR4 Steam"] = steam;
+
+        foreach (var launcher in Launchers.Where(Configuration.DailyTenOfTenLaunchers.Contains))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!targets.TryGetValue(launcher, out var target))
+            {
+                AppendLog($"Diárias 10/10 — {launcher}: janela não encontrada.");
+                continue;
+            }
+            var started = false;
+            try
+            {
+                await DelayRoutineStartAsync($"Diárias 10/10 — {launcher}", cancellationToken);
+                await _windowClickService.Prepare720pAsync(target, cancellationToken, AppendLog);
+                await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
+                started = true;
+                await Task.Delay(500, cancellationToken);
+                var completed = true;
+                foreach (var step in steps)
+                {
+                    if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                        null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                    {
+                        AppendLog($"Diárias 10/10 — {launcher}: interrompida em {step.Name}; próximos cliques ignorados.");
+                        completed = false;
+                        break;
+                    }
+                    await Task.Delay(500, cancellationToken);
+                }
+                if (completed)
+                {
+                    AppendLog($"Diárias 10/10 — {launcher}: criação enviada; voltando com Esc 4× antes de F7.");
+                    await _windowClickService.PressEscapeTimesAsync(target, 4, cancellationToken, AppendLog);
+                    started = false;
+                    await Task.Delay(500, cancellationToken);
+                    await _windowClickService.PressKeyAsync(target, 0x76, "F7", cancellationToken, AppendLog);
+                    started = true;
+                    await Task.Delay(500, cancellationToken);
+                    // Centro da primeira região: X=8,55%, Y=23,85%, 11,05% × 16,46%.
+                    await _windowClickService.ClickRelativeAsync(target, 0.14075, 0.3208, cancellationToken, AppendLog);
+                    await Task.Delay(500, cancellationToken);
+                    foreach (var step in enchantSteps)
+                    {
+                        if (step.Image == "10-close.png")
+                        {
+                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 3 segundos antes de fechar o encantamento (X).");
+                            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                        }
+                        if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                            null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                        {
+                            AppendLog($"Diárias 10/10 — {launcher}: encantamento interrompido em {step.Name}; próximos cliques ignorados.");
+                            completed = false;
+                            break;
+                        }
+                        await Task.Delay(500, cancellationToken);
+                    }
+                    if (completed)
+                    {
+                        AppendLog($"Diárias 10/10 — {launcher}: voltando com Esc 4× antes de F10.");
+                        await _windowClickService.PressEscapeTimesAsync(target, 4, cancellationToken, AppendLog);
+                        started = false;
+                        await Task.Delay(500, cancellationToken);
+                        await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+                        started = true;
+                        await Task.Delay(500, cancellationToken);
+                        foreach (var step in travelSteps)
+                        {
+                            if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                                null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                            {
+                                AppendLog($"Diárias 10/10 — {launcher}: deslocamento interrompido em {step.Name}; próximos cliques e N ignorados.");
+                                completed = false;
+                                break;
+                            }
+                            // A espera após o último clique é feita abaixo, antes de N.
+                            if (step.Image != "14-fast-travel.png") await Task.Delay(500, cancellationToken);
+                        }
+                        if (completed)
+                        {
+                            // Não enviar Esc após o deslocamento nem após N.
+                            started = false;
+                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 5 segundos após Deslocamento rápido antes de N.");
+                            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                            await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
+                            await Task.Delay(350, cancellationToken);
+                            await _windowClickService.PressCtrlNumberAsync(target, 0x36, cancellationToken, AppendLog);
+                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 1min30s após Ctrl + 6 antes de F10.");
+                            await Task.Delay(TimeSpan.FromSeconds(90), cancellationToken);
+                            await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+                            started = true;
+                            await Task.Delay(500, cancellationToken);
+                            foreach (var step in herbSteps)
+                            {
+                                if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                                    null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                                {
+                                    AppendLog($"Diárias 10/10 — {launcher}: etapa de ervas interrompida em {step.Name}; próximos cliques e atalhos ignorados.");
+                                    completed = false;
+                                    break;
+                                }
+                                if (step.Image != "17-herb-travel.png") await Task.Delay(500, cancellationToken);
+                            }
+                            if (completed)
+                            {
+                                started = false;
+                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de N e Ctrl + 5.");
+                                await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+                                await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
+                                await Task.Delay(350, cancellationToken);
+                                await _windowClickService.PressCtrlNumberAsync(target, 0x35, cancellationToken, AppendLog);
+                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 3 minutos após Ctrl + 5 antes de F10.");
+                                await Task.Delay(TimeSpan.FromMinutes(3), cancellationToken);
+                                await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+                                started = true;
+                                await Task.Delay(500, cancellationToken);
+                                foreach (var step in miningSteps)
+                                {
+                                    if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                                        null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                                    {
+                                        AppendLog($"Diárias 10/10 — {launcher}: mineração interrompida em {step.Name}; próximos cliques e atalhos ignorados.");
+                                        completed = false;
+                                        break;
+                                    }
+                                    if (step.Image != "20-mining-travel.png") await Task.Delay(500, cancellationToken);
+                                }
+                                if (completed)
+                                {
+                                    started = false;
+                                    AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de N e Ctrl + 3.");
+                                    await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+                                    await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
+                                    await Task.Delay(350, cancellationToken);
+                                    await _windowClickService.PressCtrlNumberAsync(target, 0x33, cancellationToken, AppendLog);
+                                    AppendLog($"Diárias 10/10 — {launcher}: sequência enviada até Ctrl + 3. A conclusão das 10 missões ainda não é verificada.");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { AppendLog($"Diárias 10/10 — {launcher}: {ex.Message}"); }
+            finally
+            {
+                if (started && !cancellationToken.IsCancellationRequested)
+                {
+                    try { await _windowClickService.PressEscapeTimesAsync(target, 4, cancellationToken, AppendLog); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { AppendLog($"Diárias 10/10 — {launcher}: falha ao encerrar com Esc: {ex.Message}"); }
                 }
             }
         }
@@ -1084,7 +1384,7 @@ public partial class FarmingPage : Page
                         : null;
                     var threshold = step.Name switch
                     {
-                        "Deslocamento rápido" => 0.70,
+                        "Deslocamento rápido" => 0.60,
                         "Jogar autom." => 0.72,
                         "item Deslocamento rápido" => 0.70,
                         _ => 0.78
@@ -1117,8 +1417,7 @@ public partial class FarmingPage : Page
                         AppendLog($"Missões favoritas — {launcher}: não foi possível selecionar Poupança de energia.");
                     else
                     {
-                        AppendLog($"Missões favoritas — {launcher}: reduzindo a janela ao menor tamanho permitido e mantendo o foco.");
-                        await _windowClickService.ResizeToSmallestAsync(target, cancellationToken, AppendLog);
+                        AppendLog($"Missões favoritas — {launcher}: Poupança de energia ativada; mantendo o tamanho atual da janela.");
                         await _windowClickService.ActivateAsync(target, cancellationToken);
                     }
                     completedLaunchers.Add((launcher, target));
@@ -1177,7 +1476,7 @@ public partial class FarmingPage : Page
             "ícone de Poupança de energia", 0.72, cancellationToken);
         if (!energySelected)
             throw new InvalidOperationException("não foi possível localizar o ícone de Poupança de energia.");
-        await _windowClickService.ResizeToSmallestAsync(target, cancellationToken, AppendLog);
+        AppendLog($"Missões favoritas — {launcher}: Poupança de energia ativada; mantendo o tamanho atual da janela.");
         await _windowClickService.ActivateAsync(target, cancellationToken);
     }
 
@@ -1568,8 +1867,11 @@ public partial class FarmingPage : Page
 
     private async Task<bool> FindWhileScrollingAsync(PreviewWindow target, string templatePath,
         RelativeSearchRegion region, string targetName, double threshold, CancellationToken cancellationToken,
-        Int32Rect? templateCrop = null)
+        Int32Rect? templateCrop = null, double? clickRightMargin = null)
     {
+        var templateWidth = clickRightMargin.HasValue
+            ? BitmapFrame.Create(new Uri(Path.GetFullPath(templatePath)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad).PixelWidth
+            : 0;
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var consecutiveMatches = 0;
         var scrollCount = 0;
@@ -1595,7 +1897,20 @@ public partial class FarmingPage : Page
             {
                 var clickX = result.Bounds.X + result.Bounds.Width / 2d;
                 var clickY = result.Bounds.Y + result.Bounds.Height / 2d;
-                AppendLog($"{targetName} encontrado após {scrollCount} rolagens; selecionando pelo ícone.");
+                if (clickRightMargin is { } margin)
+                {
+                    // A detecção usa só o miolo: recupera a largura completa antes de deslocar o clique.
+                    var scale = result.Bounds.Width / (double)(templateCrop?.Width ?? templateWidth);
+                    var iconLeft = result.Bounds.X - (templateCrop?.X ?? 0) * scale;
+                    clickX = iconLeft + templateWidth * scale * (1 + margin);
+                }
+                if (clickX < 0 || clickX >= frame.PixelWidth)
+                {
+                    AppendLog($"{targetName}: ponto à direita do ícone fora da janela. Nenhum clique enviado.");
+                    return false;
+                }
+                AppendLog($"{targetName} encontrado após {scrollCount} rolagens; clique em X={clickX:0}, Y={clickY:0}" +
+                    (clickRightMargin.HasValue ? " à direita do ícone." : " no ícone."));
                 var click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
                     clickY / frame.PixelHeight, cancellationToken);
                 AppendLog($"Windows aceitou o clique do item em X={click.X}, Y={click.Y}.");

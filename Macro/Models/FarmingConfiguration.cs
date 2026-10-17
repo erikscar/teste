@@ -13,7 +13,7 @@ public sealed class FarmingConfiguration
     public List<string> ActionOrder { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore]
     public IEnumerable<string> OrderedActions => (ActionOrder ?? []).Concat(new[]
-        { "Doação diária", "Pergaminho diário", "Raids normais", "Boss", "Arena", "Missões favoritas" }).Distinct();
+        { "Doação diária", "Pergaminho diário", "Diárias 10/10", "Raids normais", "Boss", "Arena", "Missões favoritas" }).Distinct();
     public List<string> DonationLaunchers { get; set; } = [];
     public List<string>? DailyScrollLaunchers { get; set; }
     public List<string> DailyTenOfTenLaunchers { get; set; } = [];

@@ -43,6 +43,7 @@ public sealed class FarmingPreset : System.ComponentModel.INotifyPropertyChanged
             }
             if (c.DailyDonation) Add("Doação diária", Launchers(c.DonationLaunchers));
             if (c.DailyScroll) Add("Pergaminho diário", Launchers(c.DailyScrollLaunchers ?? []));
+            if (c.DailyTenOfTenEnabled) Add("Diárias 10/10", "Criar material raro e encantar · " + Launchers(c.DailyTenOfTenLaunchers));
             if (c.Normal.IsEnabled) Add("Raids normais", RaidDetails(c.NormalLaunchers), $"{c.Normal.RepeatCountText}×");
             if (c.Boss.IsEnabled) Add("Boss", RaidDetails(c.BossLaunchers), $"{c.Boss.RepeatCountText}×");
             if (c.DailyFavorites)
@@ -71,6 +72,7 @@ public sealed class FarmingPreset : System.ComponentModel.INotifyPropertyChanged
             var steps = new List<string>();
             if (c.DailyDonation) steps.Add("Doação diária");
             if (c.DailyScroll) steps.Add("Pergaminho diário");
+            if (c.DailyTenOfTenEnabled) steps.Add("Diárias 10/10 — criar material raro e encantar: " + string.Join(", ", c.DailyTenOfTenLaunchers));
             if (c.Normal.IsEnabled) steps.Add($"Raids normais ({c.Normal.RepeatCountText}x) — {c.NormalLaunchers.Starter}; convidados: {c.NormalLaunchers.Guest1}, {c.NormalLaunchers.Guest2}");
             if (c.Boss.IsEnabled) steps.Add($"Boss ({c.Boss.RepeatCountText}x) — {c.BossLaunchers.Starter}; convidados: {c.BossLaunchers.Guest1}, {c.BossLaunchers.Guest2}");
             if (c.DailyFavorites)

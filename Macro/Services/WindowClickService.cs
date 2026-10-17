@@ -4,6 +4,54 @@ namespace Macro.Services;
 
 public sealed class WindowClickService
 {
+    public async Task ClickBackgroundAsync(PreviewWindow target, int x, int y,
+        int frameWidth, int frameHeight, CancellationToken token)
+    {
+        ValidateTarget(target);
+        token.ThrowIfCancellationRequested();
+        nint position;
+        var previousDpi = SetThreadDpiAwarenessContext(new nint(-4));
+        try
+        {
+            if (!GetClientRect(target.Handle, out var rect) || rect.Right <= 0 || rect.Bottom <= 0)
+                throw new InvalidOperationException("Não foi possível medir a área do jogo.");
+            if (rect.Right != frameWidth || rect.Bottom != frameHeight)
+                throw new InvalidOperationException("A janela mudou de tamanho após a detecção. Faça o teste novamente.");
+            if (x < 0 || y < 0 || x >= rect.Right || y >= rect.Bottom || x > short.MaxValue || y > short.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(x));
+            position = new nint((y << 16) | (x & 0xffff));
+        }
+        finally
+        {
+            if (previousDpi != 0) SetThreadDpiAwarenessContext(previousDpi);
+        }
+
+        await SendBackgroundMouseAsync(target, 0x0200, 0, position);
+        await Task.Delay(150, token);
+        token.ThrowIfCancellationRequested();
+        // Release even if button-down times out: delivery may already have occurred.
+        try
+        {
+            await SendBackgroundMouseAsync(target, 0x0201, 1, position);
+            await Task.Delay(180, token);
+        }
+        finally { await SendBackgroundMouseAsync(target, 0x0202, 0, position); }
+    }
+
+    private static Task SendBackgroundMouseAsync(PreviewWindow target, uint message, nuint buttons, nint position) => Task.Run(() =>
+    {
+        ValidateWindow(target);
+        Marshal.SetLastPInvokeError(0);
+        // Wait for window dispatch, with a bounded timeout; this is not proof of an in-game action.
+        if (SendMessageTimeout(target.Handle, message, buttons, position, 0x0002 | 0x0020, 750, out _) == 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException(error == 5
+                ? "Clique bloqueado (erro 5). Execute o macro com o mesmo nível de permissão do jogo."
+                : $"A janela não confirmou o processamento da mensagem 0x{message:X} (erro {error}; possível tempo limite).");
+        }
+    });
+
     public async Task Prepare720pAsync(PreviewWindow target, CancellationToken token, Action<string>? log = null)
     {
         await Ensure720pAsync(target, token);
@@ -437,4 +485,7 @@ public sealed class WindowClickService
     [DllImport("user32.dll")] private static extern nint WindowFromPoint(NativePoint point);
     [DllImport("user32.dll")] private static extern nint GetAncestor(nint hwnd, uint flags);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint SendMessageTimeout(nint hwnd, uint message, nuint wParam, nint lParam,
+        uint flags, uint timeout, out nuint result);
 }
