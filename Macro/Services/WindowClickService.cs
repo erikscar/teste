@@ -203,14 +203,14 @@ public sealed class WindowClickService
         await ActivateAsync(target, token);
         var point = await MoveCursorAsync(target, x, y, token);
         log?.Invoke($"Clique: movimento SendInput aceito para X={point.X}, Y={point.Y}.");
-        await Task.Delay(250, token);
+        await Task.Delay(Random.Shared.Next(160, 281), token);
         VerifyClickTarget(target, point, x, y);
         token.ThrowIfCancellationRequested();
         SendMouse(0x0002, "pressionar");
         try
         {
             log?.Invoke("Clique: botão esquerdo pressionado (SendInput aceito).");
-            await Task.Delay(100, token);
+            await Task.Delay(Random.Shared.Next(70, 131), token);
         }
         finally
         {
@@ -335,7 +335,8 @@ public sealed class WindowClickService
         if (notches < 1) throw new ArgumentOutOfRangeException(nameof(notches));
         await ActivateAsync(target, token);
         token.ThrowIfCancellationRequested();
-        var point = PositionCursor(target, x, y);
+        var point = await MoveCursorAsync(target, x, y, token);
+        VerifyClickTarget(target, point, x, y);
         SendMouse(0x0800, "rolar a lista para baixo", data: unchecked((uint)(-120 * notches)));
         log?.Invoke($"Roda do mouse rolada {notches} nível(is) para baixo em X={point.X}, Y={point.Y} (PID {target.ProcessId}).");
     }
@@ -388,15 +389,25 @@ public sealed class WindowClickService
                 throw new InvalidOperationException("Não foi possível ler a posição do mouse.");
         }
         finally { if (oldDpi != 0) SetThreadDpiAwarenessContext(oldDpi); }
-        for (var step = 1; step <= 12; step++)
+        var distance = Math.Sqrt(Math.Pow(end.X - start.X, 2) + Math.Pow(end.Y - start.Y, 2));
+        var duration = Math.Clamp(140 + distance * 0.35 + Random.Shared.Next(0, 121), 160, 650);
+        var steps = Math.Max(8, (int)(duration / 16));
+        var controlX = start.X + (end.X - start.X) * (0.25 + Random.Shared.NextDouble() * 0.5);
+        var controlY = start.Y + (end.Y - start.Y) * (0.25 + Random.Shared.NextDouble() * 0.5);
+        for (var step = 1; step <= steps; step++)
         {
             token.ThrowIfCancellationRequested();
+            ValidateTarget(target);
+            if (GetForegroundWindow() != target.Handle)
+                throw new InvalidOperationException("MIR4 perdeu o foco durante o movimento do mouse.");
+            var position = MouseVariation.CurvePoint(start.X, start.Y, end.X, end.Y,
+                controlX, controlY, step / (double)steps);
             MoveCursorToPoint(new NativePoint
             {
-                X = start.X + (int)Math.Round((end.X - start.X) * step / 12d),
-                Y = start.Y + (int)Math.Round((end.Y - start.Y) * step / 12d)
+                X = (int)Math.Round(position.X),
+                Y = (int)Math.Round(position.Y)
             });
-            await Task.Delay(20, token);
+            await Task.Delay((int)(duration / steps), token);
         }
         return end;
     }

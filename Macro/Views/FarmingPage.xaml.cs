@@ -947,22 +947,24 @@ public partial class FarmingPage : Page
             ("10-close.png", "fechar encantamento", new(0.9159, 0.0149, 0.0841, 0.1081)),
             ("11-ok.png", "OK do encantamento", new(0.4945, 0.6094, 0.1589, 0.1204))
         };
+        var resourceIconRegion = new RelativeSearchRegion(0.3019, 0.1135, 0.3963, 0.6052);
+        const double resourceIconConfidence = 0.70;
         var travelSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
         {
             ("12-map.png", "ícone de localização", new(0.6064, 0.1648, 0.0705, 0.1130)),
-            ("13-green-icon.png", "ícone verde", new(0.3107, 0.2557, 0.0940, 0.1179)),
+            ("13-green-icon.png", "ícone de energia", resourceIconRegion),
             ("14-fast-travel.png", "Deslocamento rápido", new(0.2969, 0.8354, 0.2128, 0.1327))
         };
         var herbSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
         {
             ("15-herb-map.png", "localização para ervas", new(0.6078, 0.1574, 0.0663, 0.1228)),
-            ("16-herb-icon.png", "ícone de ervas", new(0.3231, 0.3834, 0.0705, 0.1105)),
+            ("16-herb-icon.png", "ícone de ervas", resourceIconRegion),
             ("17-herb-travel.png", "Deslocamento rápido para ervas", new(0.2996, 0.8330, 0.2114, 0.1302))
         };
         var miningSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
         {
             ("18-mining-map.png", "localização para minério", new(0.6105, 0.1672, 0.0663, 0.1056)),
-            ("19-mining-icon.png", "ícone de mineração", new(0.3314, 0.5087, 0.0567, 0.1056)),
+            ("19-mining-icon.png", "ícone de mineração", resourceIconRegion),
             ("20-mining-travel.png", "Deslocamento rápido para minério", new(0.2913, 0.8280, 0.2197, 0.1498))
         };
         foreach (var step in steps.Concat(enchantSteps).Concat(travelSteps).Concat(herbSteps).Concat(miningSteps))
@@ -1046,7 +1048,7 @@ public partial class FarmingPage : Page
                         foreach (var step in travelSteps)
                         {
                             if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
-                                null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                                null, $"10/10: {step.Name}", step.Image == "13-green-icon.png" ? resourceIconConfidence : 0.78, cancellationToken))
                             {
                                 AppendLog($"Diárias 10/10 — {launcher}: deslocamento interrompido em {step.Name}; próximos cliques e N ignorados.");
                                 completed = false;
@@ -1072,7 +1074,7 @@ public partial class FarmingPage : Page
                             foreach (var step in herbSteps)
                             {
                                 if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
-                                    null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                                    null, $"10/10: {step.Name}", step.Image == "16-herb-icon.png" ? resourceIconConfidence : 0.78, cancellationToken))
                                 {
                                     AppendLog($"Diárias 10/10 — {launcher}: etapa de ervas interrompida em {step.Name}; próximos cliques e atalhos ignorados.");
                                     completed = false;
@@ -1096,7 +1098,7 @@ public partial class FarmingPage : Page
                                 foreach (var step in miningSteps)
                                 {
                                     if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
-                                        null, $"10/10: {step.Name}", 0.78, cancellationToken))
+                                        null, $"10/10: {step.Name}", step.Image == "19-mining-icon.png" ? resourceIconConfidence : 0.78, cancellationToken))
                                     {
                                         AppendLog($"Diárias 10/10 — {launcher}: mineração interrompida em {step.Name}; próximos cliques e atalhos ignorados.");
                                         completed = false;
@@ -1749,8 +1751,8 @@ public partial class FarmingPage : Page
 
             if (consecutiveMatches >= 3)
             {
-                var clickX = result.Bounds.X + result.Bounds.Width / 2d;
-                var clickY = result.Bounds.Y + result.Bounds.Height / 2d;
+                var clickX = MouseVariation.TargetCoordinate(result.Bounds.X, result.Bounds.Width);
+                var clickY = MouseVariation.TargetCoordinate(result.Bounds.Y, result.Bounds.Height);
                 AppendLog($"{routineName}: OK confirmado ({result.Confidence:0.00}); movendo o mouse e clicando.");
                 var click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
                     clickY / frame.PixelHeight, cancellationToken);
@@ -1904,10 +1906,12 @@ public partial class FarmingPage : Page
                 for (var press = 1; press <= clickCount; press++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    clickX = MouseVariation.TargetCoordinate(result.Bounds.X, result.Bounds.Width, clickAnchorX ?? 0.5);
+                    clickY = MouseVariation.TargetCoordinate(result.Bounds.Y, result.Bounds.Height, clickAnchorY ?? 0.5);
                     click = await _windowClickService.ClickRelativeAsync(target, clickX / frame.PixelWidth,
                         clickY / frame.PixelHeight, cancellationToken);
                     AppendLog($"{target.ProcessName} (PID {target.ProcessId}): Windows aceitou clique {press}/{clickCount} em X={click.X}, Y={click.Y} da tela.");
-                    if (press < clickCount) await Task.Delay(180, cancellationToken);
+                    if (press < clickCount) await Task.Delay(Random.Shared.Next(150, 241), cancellationToken);
                 }
                 return true;
             }
