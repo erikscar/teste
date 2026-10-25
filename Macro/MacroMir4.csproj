@@ -78,6 +78,9 @@
 		<Content Include="Assets\Templates\DailyTenOfTen\*.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
+		<Content Include="Assets\Templates\DarkSteelMining\*.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
 		<Content Include="Data\bosses.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
@@ -85,6 +88,10 @@
 	<ItemGroup>
 	  <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
+	  <PackageReference Include="Tesseract" Version="5.2.0" />
+	</ItemGroup>
+	<ItemGroup>
+		<Content Include="Assets\Ocr\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 	</ItemGroup>
 
 </Project>

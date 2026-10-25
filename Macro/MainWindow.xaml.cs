@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly Views.HomePage _homePage;
     private readonly Views.PresetsPage _presetsPage;
     private readonly Views.CaptureTestPage _captureTestPage;
+    private readonly Views.InitialSettingsPage _initialSettingsPage;
     private readonly System.Windows.Threading.DispatcherTimer _sidebarRefresh = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow()
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
         _homePage = new Views.HomePage(_farmingPage);
         _presetsPage = new Views.PresetsPage();
         _captureTestPage = new Views.CaptureTestPage();
+        _initialSettingsPage = new Views.InitialSettingsPage();
         MainFrame.Navigate(_homePage);
         _sidebarRefresh.Tick += (_, _) => RefreshSidebarActivity();
         Loaded += (_, _) => { RefreshSidebarActivity(); _sidebarRefresh.Start(); };
@@ -49,6 +51,7 @@ public partial class MainWindow : Window
     private void BtnPresets_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_presetsPage);
 
     private void BtnFarming_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_farmingPage);
+    private void BtnInitialSettings_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_initialSettingsPage);
     private void BtnTimer_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_timerPage);
     private void BtnDaily_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_dailyPage);
     private void BtnCapture_Click(object sender, RoutedEventArgs e) => MainFrame.Navigate(_captureTestPage);
@@ -61,12 +64,14 @@ public partial class MainWindow : Window
         DeactivateButton(BtnHome);
         DeactivateButton(BtnPresets);
         DeactivateButton(BtnCapture);
+        DeactivateButton(BtnInitialSettings);
         if (e.Content is Views.FarmingPage) ActivateButton(BtnFarming);
         else if (e.Content is Views.TimerPage) ActivateButton(BtnTimer);
         else if (e.Content is Views.DailyPage) ActivateButton(BtnDaily);
         else if (e.Content is Views.HomePage) ActivateButton(BtnHome);
         else if (e.Content is Views.PresetsPage) ActivateButton(BtnPresets);
         else if (e.Content is Views.CaptureTestPage) ActivateButton(BtnCapture);
+        else if (e.Content is Views.InitialSettingsPage) ActivateButton(BtnInitialSettings);
     }
 
     private static void ActivateButton(Button button)

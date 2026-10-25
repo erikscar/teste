@@ -27,6 +27,9 @@ public partial class FarmingPage : Page
     private readonly WindowClickService _windowClickService = new();
     private readonly WindowPreviewService _windowCaptureService = new();
     private readonly TemplateSearchService _templateSearchService = new();
+    private readonly MissionCountReader _missionCountReader = new();
+    private readonly HashSet<string> _completedMissionLaunchers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _missionCountStatuses = new();
 
     private readonly FarmingPresetService _presetService = new();
     private List<FarmingPreset> _presets = [];
@@ -126,10 +129,25 @@ public partial class FarmingPage : Page
 
     private void ApplyPreset(FarmingPreset preset)
     {
+        ApplyConfiguration(preset.Configuration, preset.Name);
+        AppendLog($"Preset '{preset.Name}' carregado. Pressione Iniciar para executar o fluxo.");
+    }
+
+    private void ClearConfiguration_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsRunning) return;
+        ApplyConfiguration(new FarmingConfiguration(), "");
+        PresetSelector.SelectedItem = null;
+        AppendLog("Configurações do Farming limpas. Os presets salvos foram preservados.");
+        SaveNotification.Show("Configurações limpas com sucesso.");
+    }
+
+    private void ApplyConfiguration(FarmingConfiguration configuration, string presetName)
+    {
         _loadingPreset = true;
         try
         {
-            var loaded = FarmingPresetService.Copy(preset.Configuration);
+            var loaded = FarmingPresetService.Copy(configuration);
             if (loaded.DailyItems is not { Count: 3 } ||
                 !loaded.DailyItems.Select(item => item.Name).SequenceEqual(new[] { "Platina", "Aço", "Óleo" }, StringComparer.OrdinalIgnoreCase))
                 loaded.DailyItems = FarmingConfiguration.CreateDailyMissionItems();
@@ -144,17 +162,15 @@ public partial class FarmingPage : Page
             }
             // Cada rotina é ativada somente pela própria seleção de launchers.
             loaded.DailyScrollLaunchers ??= [];
+            loaded.DarkSteelMiningLaunchers = (loaded.DarkSteelMiningLaunchers ?? [])
+                .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             loaded.DailyTenOfTenLaunchers ??= [];
             loaded.DailyTenOfTenLaunchers = loaded.DailyTenOfTenLaunchers
                 .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             loaded.DailyFavoriteLaunchers ??= loaded.DailyFavorites ? [.. loaded.DailyLaunchers] : [];
-            loaded.DailyFavoriteRetryLaunchers ??= [];
-            loaded.DailyFavoriteRetryLaunchers = loaded.DailyFavoriteRetryLaunchers
-                .Where(Launchers.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            loaded.DailyFavoriteRetryMaps ??= new(StringComparer.OrdinalIgnoreCase);
-            foreach (var launcher in loaded.DailyFavoriteRetryMaps.Keys.ToArray())
-                if (!Launchers.Contains(launcher) || !MissionMaps.Contains(loaded.DailyFavoriteRetryMaps[launcher]))
-                    loaded.DailyFavoriteRetryMaps.Remove(launcher);
+            loaded.DailyCompletionLauncher1 ??= new();
+            loaded.DailyCompletionLauncher2 ??= new();
+            loaded.DailyCompletionSteam ??= new();
             foreach (var launcher in loaded.DailyFavoriteLaunchers)
                 if (!loaded.DailyLaunchers.Contains(launcher, StringComparer.OrdinalIgnoreCase))
                     loaded.DailyLaunchers.Add(launcher);
@@ -170,18 +186,15 @@ public partial class FarmingPage : Page
                 checkbox.IsChecked = Configuration.DailyScrollLaunchers.Contains((string)checkbox.Tag);
             foreach (var checkbox in new[] { TenOfTenLauncher1, TenOfTenLauncher2, TenOfTenSteam })
                 checkbox.IsChecked = Configuration.DailyTenOfTenLaunchers.Contains((string)checkbox.Tag);
+            foreach (var checkbox in new[] { DarkSteelLauncher1, DarkSteelLauncher2, DarkSteelSteam })
+                checkbox.IsChecked = Configuration.DarkSteelMiningLaunchers.Contains((string)checkbox.Tag);
             foreach (var checkbox in new[] { DailyLauncher1, DailyLauncher2, DailySteam })
                 checkbox.IsChecked = Configuration.DailyLaunchers.Contains((string)checkbox.Tag);
             foreach (var checkbox in new[] { DailyFavoriteLauncher1, DailyFavoriteLauncher2, DailyFavoriteSteam })
                 checkbox.IsChecked = Configuration.DailyFavoriteLaunchers.Contains((string)checkbox.Tag);
             foreach (var combo in new[] { DailyMapLauncher1, DailyMapLauncher2, DailyMapSteam })
                 combo.SelectedItem = GetDailyMap((string)combo.Tag);
-            foreach (var checkbox in new[] { DailyRetryLauncher1, DailyRetryLauncher2, DailyRetrySteam })
-                checkbox.IsChecked = Configuration.DailyFavoriteRetryLaunchers.Contains((string)checkbox.Tag);
-            foreach (var combo in new[] { DailyRetryMapLauncher1, DailyRetryMapLauncher2, DailyRetryMapSteam })
-                combo.SelectedItem = GetDailyFavoriteRetryMap((string)combo.Tag);
-            PresetName.Text = preset.Name;
-            AppendLog($"Preset '{preset.Name}' carregado. Pressione Iniciar para executar o fluxo.");
+            PresetName.Text = presetName;
         }
         finally { _loadingPreset = false; }
     }
@@ -239,6 +252,8 @@ public partial class FarmingPage : Page
     private void ScrollLauncher_Unchecked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DailyScrollLaunchers ??= [], sender, false);
     private void TenOfTenLauncher_Checked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DailyTenOfTenLaunchers, sender, true);
     private void TenOfTenLauncher_Unchecked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DailyTenOfTenLaunchers, sender, false);
+    private void DarkSteelLauncher_Checked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DarkSteelMiningLaunchers, sender, true);
+    private void DarkSteelLauncher_Unchecked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DarkSteelMiningLaunchers, sender, false);
     private void DailyLauncher_Checked(object sender, RoutedEventArgs e) => UpdateLauncherSelection(Configuration.DailyLaunchers, sender, true);
     private void DailyLauncher_Unchecked(object sender, RoutedEventArgs e)
     {
@@ -291,28 +306,38 @@ public partial class FarmingPage : Page
         Configuration.DailyLauncherMaps[launcher] = map;
     }
 
-    private string GetDailyFavoriteRetryMap(string launcher) =>
-        Configuration.DailyFavoriteRetryMaps.TryGetValue(launcher, out var map) && MissionMaps.Contains(map) ? map : "Campo";
-
-    private void DailyFavoriteRetry_Checked(object sender, RoutedEventArgs e)
+    private static bool IsValidCompletionLimitInput(TextBox input, string insertion)
     {
-        if (_loadingPreset || sender is not CheckBox { Tag: string launcher }) return;
-        Configuration.DailyFavoriteRetryLaunchers ??= [];
-        if (!Configuration.DailyFavoriteRetryLaunchers.Contains(launcher, StringComparer.OrdinalIgnoreCase))
-            Configuration.DailyFavoriteRetryLaunchers.Add(launcher);
+        var candidate = input.Text.Remove(input.SelectionStart, input.SelectionLength)
+            .Insert(input.SelectionStart, insertion);
+        return candidate.Length == 0 ||
+            (candidate.All(character => character is >= '0' and <= '9') &&
+             int.TryParse(candidate, out var limit) && limit is >= 0 and <= 30);
     }
 
-    private void DailyFavoriteRetry_Unchecked(object sender, RoutedEventArgs e)
+    private void CompletionLimit_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
     {
-        if (_loadingPreset || sender is not CheckBox { Tag: string launcher }) return;
-        Configuration.DailyFavoriteRetryLaunchers ??= [];
-        Configuration.DailyFavoriteRetryLaunchers.RemoveAll(name => string.Equals(name, launcher, StringComparison.OrdinalIgnoreCase));
+        if (sender is TextBox input) e.Handled = !IsValidCompletionLimitInput(input, e.Text);
     }
 
-    private void DailyFavoriteRetryMap_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void CompletionLimit_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (_loadingPreset || sender is not ComboBox { Tag: string launcher, SelectedItem: string map }) return;
-        Configuration.DailyFavoriteRetryMaps[launcher] = map;
+        if (e.Key == System.Windows.Input.Key.Space) e.Handled = true;
+    }
+
+    private void CompletionLimit_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not TextBox input || e.DataObject.GetData(DataFormats.UnicodeText) is not string text ||
+            !IsValidCompletionLimitInput(input, text))
+            e.CancelCommand();
+    }
+
+    private void CompletionLimit_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox input) return;
+        var limit = int.TryParse(input.Text, out var value) ? Math.Clamp(value, 0, 30) : 0;
+        input.SetCurrentValue(TextBox.TextProperty, limit.ToString(CultureInfo.InvariantCulture));
+        input.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
     }
 
     private void DailyMissionMaps_Loaded(object sender, RoutedEventArgs e)
@@ -474,7 +499,7 @@ public partial class FarmingPage : Page
 
         AppendLog($"DailyArena: starter {Configuration.ArenaStarter}; convidado {Configuration.ArenaInviter}.");
         await PrepareRoutineWindowAsync(starter, cancellationToken);
-        await Task.Delay(5000, cancellationToken);
+        await WaitWithCountdownAsync(TimeSpan.FromSeconds(5), "Arena: aguardando para abrir F9.", cancellationToken);
         await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
         await Task.Delay(350, cancellationToken);
         var steps = new[] { "ícone Guerra", "Arena", "Criar Arena (menu)", "Privado", "campo da senha", "botão 2", "Entrada completa", "Criar Arena", "adicionar convidados", "Convidar todos" };
@@ -571,6 +596,13 @@ public partial class FarmingPage : Page
         _runCancellation = new CancellationTokenSource();
         var cancellationToken = _runCancellation.Token;
         BtnStart.IsEnabled = false;
+        _completedMissionLaunchers.Clear();
+        _missionCountStatuses.Clear();
+        MissionCountImage.Source = null;
+        foreach (var launcher in Launchers.Where(launcher => Configuration.CompletionCheckFor(launcher).Enabled))
+            UpdateMissionCountStatus(launcher, null, "aguardando conferência");
+        if (_missionCountStatuses.Count == 0)
+            MissionCountStatusText.Text = "Missões: conferência desabilitada";
         try
         {
             ConfigurationPanel.IsEnabled = false;
@@ -582,7 +614,7 @@ public partial class FarmingPage : Page
                 {
                     StatusText.Text = "Aguardando horário";
                     AppendLog($"Início agendado para {startAt:dd/MM/yyyy HH:mm}. Use Stop para cancelar a espera.");
-                    await Task.Delay(delay, cancellationToken);
+                    await WaitWithCountdownAsync(delay, $"Início do macro agendado para {startAt:dd/MM/yyyy HH:mm}.", cancellationToken);
                 }
                 AppendLog("Horário atingido; iniciando as rotinas selecionadas.");
             }
@@ -598,9 +630,10 @@ public partial class FarmingPage : Page
                     case "Doação diária" when Configuration.DailyDonation: await DailyDonate(cancellationToken); break;
                     case "Pergaminho diário" when Configuration.DailyScroll: await DailyScroll(cancellationToken); break;
                     case "Diárias 10/10" when Configuration.DailyTenOfTenEnabled: await DailyTenOfTen(cancellationToken); break;
+                    case "Minerar Dark Steel" when Configuration.DarkSteelMiningEnabled: await MineDarkSteel(cancellationToken); break;
                     case "Raids normais" when Configuration.Normal.IsEnabled: await DailyFavoriteRaid(cancellationToken); break;
                     case "Boss" when Configuration.Boss.IsEnabled: await DailyRaidBoss(cancellationToken); break;
-                    case "Missões favoritas" when Configuration.DailyFavoriteLaunchers is { Count: > 0 }:
+                    case "Missões favoritas" when Configuration.DailyMissionLaunchersToRun.Any():
                         await DailyFavoriteMissions(cancellationToken);
                         break;
                     case "Arena" when Configuration.ArenaEnabled:
@@ -616,7 +649,9 @@ public partial class FarmingPage : Page
                         break;
                 }
             }
-            if (!Configuration.DailyDonation && !Configuration.DailyScroll && !Configuration.DailyTenOfTenEnabled &&
+            await MonitorDailyMissionCompletionAsync(cancellationToken);
+            if (!Launchers.Any(launcher => Configuration.CompletionCheckFor(launcher).Enabled) &&
+                !Configuration.DailyDonation && !Configuration.DailyScroll && !Configuration.DailyTenOfTenEnabled && !Configuration.DarkSteelMiningEnabled &&
                 Configuration.DailyFavoriteLaunchers is not { Count: > 0 } &&
                 !Configuration.Normal.IsEnabled && !Configuration.Boss.IsEnabled && !Configuration.ArenaEnabled)
                 AppendLog("Nenhuma rotina diária está ativada; nenhuma ação executada.");
@@ -648,15 +683,44 @@ public partial class FarmingPage : Page
         if (delay <= TimeSpan.Zero) return;
         StatusText.Text = "Aguardando Arena";
         AppendLog($"Arena agendada para {startAt:dd/MM/yyyy HH:mm}. Use Stop para cancelar a espera.");
-        await Task.Delay(delay, cancellationToken);
+        await WaitWithCountdownAsync(delay, $"Arena agendada para {startAt:dd/MM/yyyy HH:mm}.", cancellationToken);
         AppendLog("Horário da Arena atingido; iniciando a Arena.");
         StatusText.Text = "Em execução";
+    }
+
+    private async Task WaitWithCountdownAsync(TimeSpan duration, string activity, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (duration <= TimeSpan.Zero) return;
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        WaitActivityText.Text = activity;
+        try
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                var remaining = duration - elapsed.Elapsed;
+                if (remaining <= TimeSpan.Zero) break;
+                var seconds = (long)Math.Ceiling(remaining.TotalSeconds);
+                WaitCountdownText.Text = seconds >= 3600
+                    ? $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}"
+                    : $"{seconds / 60:00}:{seconds % 60:00}";
+                WaitProgress.Value = Math.Clamp(elapsed.Elapsed.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100);
+                await Task.Delay(remaining < TimeSpan.FromMilliseconds(250) ? remaining : TimeSpan.FromMilliseconds(250), token);
+            }
+        }
+        finally
+        {
+            WaitCountdownText.Text = "--:--";
+            WaitActivityText.Text = token.IsCancellationRequested ? "Espera cancelada" : "Nenhuma espera em andamento";
+            WaitProgress.Value = 0;
+        }
     }
 
     private async Task DelayRoutineStartAsync(string routine, CancellationToken cancellationToken)
     {
         AppendLog($"{routine}: aguardando 4 segundos antes de iniciar.");
-        await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+        await WaitWithCountdownAsync(TimeSpan.FromSeconds(4), $"{routine}: aguardando 4 segundos antes de iniciar.", cancellationToken);
     }
 
     private async Task DailyDonate(CancellationToken cancellationToken)
@@ -803,7 +867,7 @@ public partial class FarmingPage : Page
         var firstRegion = new RelativeSearchRegion(0.5912, 0.1476, 0.1092, 0.1498);
         var secondRegion = new RelativeSearchRegion(0.2844, 0.1206, 0.1644, 0.1548);
         var thirdRegion = new RelativeSearchRegion(0.2554, 0.8108, 0.2846, 0.1892);
-        var buyButtonRegion = new RelativeSearchRegion(0.1311, 0.1771, 0.3786, 0.6731);
+        var buyButtonRegion = new RelativeSearchRegion(0.2979, 0.2813, 0.1383, 0.1442);
         var scrollListRegion = new RelativeSearchRegion(0.6023, 0.0985, 0.3977, 0.8942);
         var quantityFiveRegion = new RelativeSearchRegion(0.3024, 0.4424, 0.4118, 0.1892);
         var buy150kRegion = new RelativeSearchRegion(0.4793, 0.5529, 0.2681, 0.2727);
@@ -849,7 +913,7 @@ public partial class FarmingPage : Page
                     if (step.Name == "Comprar")
                     {
                         AppendLog($"DailyScroll — {launcher}: aguardando 5 segundos antes de procurar o botão Comprar.");
-                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                        await WaitWithCountdownAsync(TimeSpan.FromSeconds(5), $"DailyScroll — {launcher}: aguardando 5 segundos antes de procurar o botão Comprar.", cancellationToken);
                     }
                     bool found;
                     if (step.Name == "Comprar")
@@ -861,12 +925,12 @@ public partial class FarmingPage : Page
                             {
                                 AppendLog($"DailyScroll — {launcher}: botão Comprar não encontrado; pressionando Z ({attempt}/2) e aguardando 4 segundos.");
                                 await _windowClickService.PressKeyAsync(target, 0x5A, "Z", cancellationToken, AppendLog);
-                                await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+                                await WaitWithCountdownAsync(TimeSpan.FromSeconds(4), $"DailyScroll — {launcher}: botão Comprar não encontrado; pressionando Z ({attempt}/2) e aguardando 4 segundos.", cancellationToken);
                             }
 
                             found = await FindAndClickTemplateAsync(target, step.Template, step.Region, crop,
                                 step.Name, threshold, cancellationToken, step.ClickX, step.ClickY,
-                                timeoutOverride: TimeSpan.FromSeconds(4), clickCount: 3);
+                                timeoutOverride: TimeSpan.FromSeconds(4), clickCount: 2);
                         }
                     }
                     else
@@ -916,6 +980,114 @@ public partial class FarmingPage : Page
                         await _windowClickService.PressEscapeTimesAsync(target, 3, CancellationToken.None, AppendLog);
                     }
                     catch (Exception ex) { AppendLog($"DailyScroll — {launcher}: não foi possível enviar Esc — {ex.Message}"); }
+                }
+            }
+        }
+    }
+
+    private async Task MineDarkSteel(CancellationToken cancellationToken)
+    {
+        if (Configuration.DarkSteelMiningLaunchers is not { Count: > 0 })
+        {
+            AppendLog("Minerar Dark Steel: selecione pelo menos um launcher.");
+            return;
+        }
+
+        var directory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "DarkSteelMining");
+        var locationTemplate = Path.Combine(directory, "dark-steel-location.png");
+        var pickaxeTemplate = Path.Combine(directory, "dark-steel-pickaxe.png");
+        var steelTemplate = Path.Combine(directory, "dark-steel-ore.png");
+        var moveTemplate = Path.Combine(directory, "dark-steel-move.png");
+        var moveOverlayTemplate = Path.Combine(directory, "dark-steel-move-overlay.png");
+        foreach (var template in new[] { locationTemplate, pickaxeTemplate, steelTemplate, moveTemplate, moveOverlayTemplate })
+            if (!File.Exists(template))
+                throw new FileNotFoundException("Minerar Dark Steel: imagem de referência ausente.", template);
+
+        var windows = _windowCaptureService.ListWindows();
+        var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(window => window.StartedAt).ToArray();
+        var targets = new Dictionary<string, PreviewWindow>();
+        if (clients.Length > 0) targets["MIR4 Launcher 1"] = clients[0];
+        if (clients.Length > 1) targets["MIR4 Launcher 2"] = clients[1];
+        var steam = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
+        if (steam is not null) targets["MIR4 Steam"] = steam;
+
+        var steps = new (string Template, RelativeSearchRegion Region, string Name)[]
+        {
+            (locationTemplate, new(0.6051, 0.1608, 0.0705, 0.1064), "localização da mina"),
+            (pickaxeTemplate, new(0.3006, 0.1036, 0.3989, 0.7412), "ícone de mineração"),
+            (steelTemplate, new(0.3047, 0.8521, 0.2036, 0.0985), "Dark Steel")
+        };
+
+        foreach (var launcher in Launchers.Where(Configuration.DarkSteelMiningLaunchers.Contains))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!targets.TryGetValue(launcher, out var target))
+            {
+                AppendLog($"Minerar Dark Steel — {launcher}: janela não encontrada.");
+                continue;
+            }
+            var started = false;
+            try
+            {
+                AppendLog($"Minerar Dark Steel — {launcher}: aguardando 4 segundos antes de iniciar a rotina.");
+                await WaitWithCountdownAsync(TimeSpan.FromSeconds(4), $"Minerar Dark Steel — {launcher}: aguardando 4 segundos antes de iniciar a rotina.", cancellationToken);
+                AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: iniciando com F10.");
+                await PrepareRoutineWindowAsync(target, cancellationToken);
+                await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+                started = true;
+                await Task.Delay(500, cancellationToken);
+
+                var sequenceCompleted = true;
+                foreach (var step in steps)
+                {
+                    if (!await FindAndClickTemplateAsync(target, step.Template, step.Region, null,
+                        step.Name, 0.70, cancellationToken))
+                    {
+                        AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: sequência interrompida; {step.Name} não encontrado.");
+                        sequenceCompleted = false;
+                        break;
+                    }
+                    await Task.Delay(350, cancellationToken);
+                }
+                if (!sequenceCompleted) continue;
+
+                AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: aguardando 7 segundos antes de abrir F10 e selecionar o destino.");
+                await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Minerar Dark Steel — PID {target.ProcessId}: aguardando 7 segundos antes de abrir F10 e selecionar o destino.", cancellationToken);
+                await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
+                await Task.Delay(500, cancellationToken);
+                // Centro da região X=34,71%, Y=44,44%, largura=1,6%, altura=2,84%.
+                await _windowClickService.ClickRelativeAsync(target, 0.3551, 0.4586, cancellationToken, AppendLog);
+                await Task.Delay(350, cancellationToken);
+                var moveRegion = new RelativeSearchRegion(0.3059, 0.3333, 0.0798, 0.1749);
+                var moveClicked = await FindAndClickTemplateAsync(target, moveTemplate, moveRegion, null,
+                    "Mover", 0.78, cancellationToken, timeoutOverride: TimeSpan.FromSeconds(3), logFailure: false);
+                if (!moveClicked)
+                {
+                    AppendLog($"Minerar Dark Steel — {launcher}: procurando Mover com o marcador sobreposto.");
+                    moveClicked = await FindAndClickTemplateAsync(target, moveOverlayTemplate, moveRegion, null,
+                        "Mover com marcador", 0.78, cancellationToken, clickAnchorX: 0.5, clickAnchorY: 0.23);
+                }
+                if (!moveClicked)
+                {
+                    AppendLog($"Minerar Dark Steel — {launcher}: botão Mover não encontrado; sequência interrompida.");
+                    continue;
+                }
+                AppendLog($"Minerar Dark Steel — {launcher}: aguardando 4 segundos após Mover antes de N.");
+                await WaitWithCountdownAsync(TimeSpan.FromSeconds(4), $"Minerar Dark Steel — {launcher}: aguardando 4 segundos após Mover antes de N.", cancellationToken);
+                await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
+                started = false;
+                AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: sequência concluída.");
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: falha — {ex.Message}"); }
+            finally
+            {
+                if (started && !cancellationToken.IsCancellationRequested)
+                {
+                    try { await _windowClickService.PressEscapeTimesAsync(target, 4, cancellationToken, AppendLog); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { AppendLog($"Minerar Dark Steel — PID {target.ProcessId}: falha ao encerrar com Esc — {ex.Message}"); }
                 }
             }
         }
@@ -1025,7 +1197,7 @@ public partial class FarmingPage : Page
                         if (step.Image == "10-close.png")
                         {
                             AppendLog($"Diárias 10/10 — {launcher}: aguardando 3 segundos antes de fechar o encantamento (X).");
-                            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(3), $"Diárias 10/10 — {launcher}: aguardando 3 segundos antes de fechar o encantamento (X).", cancellationToken);
                         }
                         if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
                             null, $"10/10: {step.Name}", 0.78, cancellationToken))
@@ -1061,13 +1233,13 @@ public partial class FarmingPage : Page
                         {
                             // Não enviar Esc após o deslocamento nem após N.
                             started = false;
-                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 5 segundos após Deslocamento rápido antes de N.");
-                            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                            await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
-                            await Task.Delay(350, cancellationToken);
+                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após Deslocamento rápido antes de Ctrl + 6.");
+                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após Deslocamento rápido antes de Ctrl + 6.", cancellationToken);
                             await _windowClickService.PressCtrlNumberAsync(target, 0x36, cancellationToken, AppendLog);
+                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
+                            await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
                             AppendLog($"Diárias 10/10 — {launcher}: aguardando 1min30s após Ctrl + 6 antes de F10.");
-                            await Task.Delay(TimeSpan.FromSeconds(90), cancellationToken);
+                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(90), $"Diárias 10/10 — {launcher}: aguardando 1min30s após Ctrl + 6 antes de F10.", cancellationToken);
                             await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
                             started = true;
                             await Task.Delay(500, cancellationToken);
@@ -1085,13 +1257,13 @@ public partial class FarmingPage : Page
                             if (completed)
                             {
                                 started = false;
-                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de N e Ctrl + 5.");
-                                await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
-                                await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
-                                await Task.Delay(350, cancellationToken);
+                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de Ctrl + 5.");
+                                await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de Ctrl + 5.", cancellationToken);
                                 await _windowClickService.PressCtrlNumberAsync(target, 0x35, cancellationToken, AppendLog);
+                                await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
+                                await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
                                 AppendLog($"Diárias 10/10 — {launcher}: aguardando 3 minutos após Ctrl + 5 antes de F10.");
-                                await Task.Delay(TimeSpan.FromMinutes(3), cancellationToken);
+                                await WaitWithCountdownAsync(TimeSpan.FromMinutes(3), $"Diárias 10/10 — {launcher}: aguardando 3 minutos após Ctrl + 5 antes de F10.", cancellationToken);
                                 await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
                                 started = true;
                                 await Task.Delay(500, cancellationToken);
@@ -1109,11 +1281,11 @@ public partial class FarmingPage : Page
                                 if (completed)
                                 {
                                     started = false;
-                                    AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de N e Ctrl + 3.");
-                                    await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
-                                    await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
-                                    await Task.Delay(350, cancellationToken);
+                                    AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de Ctrl + 3.");
+                                    await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de Ctrl + 3.", cancellationToken);
                                     await _windowClickService.PressCtrlNumberAsync(target, 0x33, cancellationToken, AppendLog);
+                                    await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
+                                    await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
                                     AppendLog($"Diárias 10/10 — {launcher}: sequência enviada até Ctrl + 3. A conclusão das 10 missões ainda não é verificada.");
                                 }
                             }
@@ -1135,10 +1307,9 @@ public partial class FarmingPage : Page
         }
     }
 
-    private async Task DailyFavoriteMissions(CancellationToken cancellationToken,
-        string? mapOverride = null, string? onlyLauncher = null, bool allowRetry = true)
+    private async Task DailyFavoriteMissions(CancellationToken cancellationToken, string? onlyLauncher = null)
     {
-        if (Configuration.DailyFavoriteLaunchers is not { Count: > 0 })
+        if (onlyLauncher is null && !Configuration.DailyMissionLaunchersToRun.Any())
         {
             AppendLog("Missões favoritas: marque ao menos um launcher para executar essa rotina.");
             return;
@@ -1156,13 +1327,14 @@ public partial class FarmingPage : Page
         var templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates");
         var fieldTemplate = Path.Combine(templatesDirectory, "daily-favorite-field-name.png");
         var acceptTemplate = Path.Combine(templatesDirectory, "daily-favorite-accept.png");
+        var acceptExitTemplate = Path.Combine(templatesDirectory, "daily-favorite-accept-exit.png");
         var autoTemplate = Path.Combine(templatesDirectory, "daily-favorite-auto.png");
         var checkTemplate = Path.Combine(templatesDirectory, "daily-favorite-check.png");
         var startTemplate = Path.Combine(templatesDirectory, "daily-favorite-start.png");
         var travelTemplate = Path.Combine(templatesDirectory, "daily-favorite-travel.png");
         var travelItemTemplate = Path.Combine(templatesDirectory, "daily-favorite-travel-item.png");
         var energyTemplate = Path.Combine(templatesDirectory, "daily-favorite-energy.png");
-        if (new[] { acceptTemplate, autoTemplate, checkTemplate, startTemplate,
+        if (new[] { acceptTemplate, acceptExitTemplate, autoTemplate, checkTemplate, startTemplate,
                 travelTemplate, travelItemTemplate, energyTemplate }
             .Any(path => !File.Exists(path)))
         {
@@ -1172,17 +1344,17 @@ public partial class FarmingPage : Page
 
         var mapRegion = new RelativeSearchRegion(0.0026, 0.0567, 0.6522, 0.2211);
         var acceptRegion = new RelativeSearchRegion(0.8247, 0.2581, 0.1753, 0.7419);
+        var acceptExitRegion = new RelativeSearchRegion(0.4973, 0.5579, 0.1423, 0.1229);
         var autoRegion = new RelativeSearchRegion(0.6423, 0.1427, 0.2612, 0.1597);
         var checkRegion = new RelativeSearchRegion(0.0896, 0.1304, 0.1175, 0.1400);
         var startRegion = new RelativeSearchRegion(0.7197, 0.7666, 0.2017, 0.1769);
         var travelRegion = new RelativeSearchRegion(0.6175, 0.4203, 0.2985, 0.2850);
         var travelItemRegion = new RelativeSearchRegion(0.3632, 0.6610, 0.3109, 0.1572);
         var energyRegion = new RelativeSearchRegion(0.1615, 0.6585, 0.0912, 0.1646);
-        var completedLaunchers = new List<(string Launcher, PreviewWindow Target)>();
 
-        var selectedLaunchers = Launchers.Where(Configuration.DailyFavoriteLaunchers!.Contains);
-        if (onlyLauncher is not null)
-            selectedLaunchers = selectedLaunchers.Where(launcher => string.Equals(launcher, onlyLauncher, StringComparison.OrdinalIgnoreCase));
+        var selectedLaunchers = Launchers.Where(launcher => onlyLauncher is not null
+            ? launcher == onlyLauncher
+            : Configuration.DailyMissionLaunchersToRun.Contains(launcher));
         foreach (var launcher in selectedLaunchers)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1199,7 +1371,9 @@ public partial class FarmingPage : Page
                 await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x75, "F6", cancellationToken, AppendLog);
                 await Task.Delay(350, cancellationToken);
-                var selectedMap = mapOverride ?? GetDailyMap(launcher);
+                // A meta é conferida pelo monitor e também quando nenhuma missão é aceita.
+                await ClaimDailyMissionRewardsAsync(target, launcher, cancellationToken);
+                var selectedMap = GetDailyMap(launcher);
                 var mapTemplate = selectedMap switch
                 {
                     "Campo" => fieldTemplate,
@@ -1258,15 +1432,29 @@ public partial class FarmingPage : Page
                     emptyScrolls = 0;
                     AppendLog($"Missões favoritas — {launcher}: clique {acceptedCount} em Aceitar missão concluído.");
                     await Task.Delay(250, cancellationToken);
+                    var dismissed = await FindAndClickTemplateAsync(target, acceptExitTemplate, acceptExitRegion,
+                        null, "Sair após aceitar missão", 0.78, cancellationToken,
+                        timeoutOverride: TimeSpan.FromSeconds(2), logFailure: false);
+                    if (dismissed)
+                        await Task.Delay(250, cancellationToken);
                 }
                 AppendLog($"Missões favoritas — {launcher}: busca encerrada após {acceptedCount} missão(ões) aceita(s) e {totalScrolls} rolagem(ns)." +
                     (totalScrolls >= maxMissionScrolls ? " Limite de rolagens atingido." : " Nenhum botão foi detectado após rolar a lista."));
 
                 if (acceptedCount == 0)
                 {
+                    if (Configuration.CompletionCheckFor(launcher).Enabled)
+                    {
+                        AppendLog($"Missões favoritas — {launcher}: nenhuma missão aceita; conferindo a meta antes da sequência alternativa.");
+                        await _windowClickService.PressEscapeTimesAsync(target, 2, cancellationToken, AppendLog);
+                        await _windowClickService.PressKeyAsync(target, 0x75, "F6", cancellationToken, AppendLog);
+                        await Task.Delay(350, cancellationToken);
+                        var result = await CheckOpenDailyMissionCountAsync(target, launcher, cancellationToken);
+                        if (result != MissionCheckResult.BelowTarget)
+                            continue;
+                    }
                     await RecoverWhenNoMissionAcceptedAsync(target, launcher, templatesDirectory,
                         travelItemTemplate, cancellationToken);
-                    completedLaunchers.Add((launcher, target));
                     continue;
                 }
 
@@ -1312,7 +1500,7 @@ public partial class FarmingPage : Page
                 if (favoriteStepsCompleted)
                 {
                     AppendLog($"Missões favoritas — {launcher}: aguardando 7 segundos antes de abrir Poupança de energia com F9.");
-                    await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+                    await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Missões favoritas — {launcher}: aguardando 7 segundos antes de abrir Poupança de energia com F9.", cancellationToken);
                     await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
                     await Task.Delay(350, cancellationToken);
                     var energySelected = await FindAndClickTemplateAsync(target, energyTemplate, energyRegion, null,
@@ -1324,21 +1512,151 @@ public partial class FarmingPage : Page
                         AppendLog($"Missões favoritas — {launcher}: Poupança de energia ativada; mantendo o tamanho atual da janela.");
                         await _windowClickService.ActivateAsync(target, cancellationToken);
                     }
-                    completedLaunchers.Add((launcher, target));
                 }
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { AppendLog($"Missões favoritas — {launcher}: falha — {ex.Message}"); }
         }
 
-        if (allowRetry)
+    }
+
+    private enum MissionCheckResult { Unknown, BelowTarget, Complete }
+
+    private void UpdateMissionCountStatus(string launcher, int? count, string status)
+    {
+        var limit = Configuration.CompletionCheckFor(launcher).Limit;
+        _missionCountStatuses[launcher] = $"{launcher}: quantidade lida: {count?.ToString() ?? "não confirmada"} / 30 · Meta: {limit} · {status}";
+        MissionCountStatusText.Text = string.Join(Environment.NewLine, _missionCountStatuses.Values);
+    }
+
+    private async Task<int?> ReadStableMissionCountAsync(PreviewWindow target, string launcher, CancellationToken token)
+    {
+        var region = new RelativeSearchRegion(0.3501, 0.1769, 0.1247, 0.0920);
+        int? previous = null;
+        for (var attempt = 0; attempt < 6; attempt++)
         {
-            var retryMonitors = completedLaunchers
-                .Where(entry => Configuration.DailyFavoriteRetryLaunchers.Contains(entry.Launcher))
-                .ToArray();
-            if (retryMonitors.Length > 0)
-                await Task.WhenAll(retryMonitors.Select(entry => MonitorMissionCompletionAndRetryAsync(
-                    entry.Target, entry.Launcher, templatesDirectory, cancellationToken)));
+            token.ThrowIfCancellationRequested();
+            var frame = await _windowCaptureService.CaptureAsync(target, token);
+            var count = await _missionCountReader.ReadAsync(frame, region, token);
+            ScreenshotImage.Source = frame;
+            MissionCountImage.Source = new CroppedBitmap(frame, new Int32Rect(
+                (int)(frame.PixelWidth * region.X), (int)(frame.PixelHeight * region.Y),
+                (int)(frame.PixelWidth * region.Width), (int)(frame.PixelHeight * region.Height)));
+            UpdateMissionCountStatus(launcher, count, count.HasValue && count == previous
+                ? (count.Value >= Configuration.CompletionCheckFor(launcher).Limit ? "meta atingida" : "abaixo da meta")
+                : "confirmando leitura");
+            DetectionStatusText.Text = count.HasValue ? $"MISSÕES / {count}/30" : "MISSÕES / Aguardando leitura da contagem";
+            if (count.HasValue && count == previous) return count;
+            previous = count;
+            await Task.Delay(250, token);
+        }
+        UpdateMissionCountStatus(launcher, null, "falha na leitura; meta não confirmada");
+        return null;
+    }
+
+    private async Task ClaimDailyMissionRewardsAsync(PreviewWindow target, string launcher,
+        CancellationToken token)
+    {
+        AppendLog($"Missões diárias — {launcher}: procurando Obter tudo após abrir F6.");
+        var claimTemplate = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "daily-favorite-claim-all.png");
+        var claimed = await FindAndClickTemplateAsync(target, claimTemplate,
+            new RelativeSearchRegion(0.8457, 0.1726, 0.1463, 0.1182), null, "Obter tudo", 0.78, token,
+            timeoutOverride: TimeSpan.FromSeconds(3), logFailure: false);
+        if (claimed)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), token);
+            await _windowClickService.PressEscapeTimesAsync(target, 1, token, AppendLog);
+        }
+        else
+            AppendLog($"Missões diárias — {launcher}: Obter tudo não encontrado; continuando a rotina.");
+    }
+
+    private async Task<MissionCheckResult> CheckOpenDailyMissionCountAsync(PreviewWindow target, string launcher,
+        CancellationToken token)
+    {
+        var limit = Configuration.CompletionCheckFor(launcher).Limit;
+        await ClaimDailyMissionRewardsAsync(target, launcher, token);
+        var count = await ReadStableMissionCountAsync(target, launcher, token);
+        if (!count.HasValue)
+        {
+            AppendLog($"Conferência — {launcher}: leitura falhou; reabrindo F6 para tentar novamente agora. Meta: {limit}.");
+            await _windowClickService.PressEscapeTimesAsync(target, 2, token, AppendLog);
+            await _windowClickService.PressKeyAsync(target, 0x75, "F6", token, AppendLog);
+            await Task.Delay(1000, token);
+            count = await ReadStableMissionCountAsync(target, launcher, token);
+        }
+        AppendLog($"Conferência — {launcher}: quantidade lida: {count?.ToString() ?? "não confirmada"}/30; meta configurada: {limit}.");
+        await _windowClickService.PressEscapeTimesAsync(target, 2, token, AppendLog);
+        await _windowClickService.PressKeyAsync(target, 0x78, "F9", token, AppendLog);
+        await Task.Delay(350, token);
+        var energyTemplate = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "daily-favorite-check-energy.png");
+        await FindAndClickTemplateAsync(target, energyTemplate,
+            new RelativeSearchRegion(0.1676, 0.6714, 0.0811, 0.1158), null,
+            "Poupança de energia após conferência", 0.78, token);
+        if (!count.HasValue)
+        {
+            AppendLog($"Conferência — {launcher}: contagem não confirmada; nova tentativa em 20 minutos.");
+            return MissionCheckResult.Unknown;
+        }
+        if (count.Value >= limit)
+        {
+            _completedMissionLaunchers.Add(launcher);
+            AppendLog($"Conferência — {launcher}: meta atingida ({count}/30 ≥ {limit}); conferência encerrada.");
+            return MissionCheckResult.Complete;
+        }
+        AppendLog($"Conferência — {launcher}: {count}/30; ainda não atingiu {limit}. Nova conferência em 20 minutos.");
+        return MissionCheckResult.BelowTarget;
+    }
+
+    private async Task MonitorDailyMissionCompletionAsync(CancellationToken token)
+    {
+        var interval = TimeSpan.FromMinutes(20);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var nextCheck = interval;
+        while (true)
+        {
+            var pending = Launchers.Where(launcher => Configuration.CompletionCheckFor(launcher).Enabled &&
+                !_completedMissionLaunchers.Contains(launcher)).ToArray();
+            if (pending.Length == 0) return;
+            StatusText.Text = "Aguardando conferência";
+            AppendLog($"Conferência: próxima rodada em 20 minutos para {string.Join(", ", pending)}. Use Stop para cancelar.");
+            var delay = nextCheck - timer.Elapsed;
+            if (delay > TimeSpan.Zero) await WaitWithCountdownAsync(delay, $"Próxima conferência das missões — {string.Join(", ", pending)}.", token);
+            nextCheck = timer.Elapsed + interval;
+            StatusText.Text = "Conferindo missões";
+            foreach (var launcher in pending)
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    // Abaixo da meta, fecha a conferência e reinicia as missões apenas deste launcher.
+                    var windows = _windowCaptureService.ListWindows();
+                    var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(window => window.StartedAt).ToArray();
+                    var target = launcher switch
+                    {
+                        "MIR4 Launcher 1" => clients.ElementAtOrDefault(0),
+                        "MIR4 Launcher 2" => clients.ElementAtOrDefault(1),
+                        _ => windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase))
+                    };
+                    if (target is null)
+                    {
+                        AppendLog($"Conferência — {launcher}: janela não encontrada; nova tentativa na próxima rodada.");
+                        continue;
+                    }
+                    await PrepareRoutineWindowAsync(target, token);
+                    await _windowClickService.PressKeyAsync(target, 0x75, "F6", token, AppendLog);
+                    await Task.Delay(350, token);
+                    var result = await CheckOpenDailyMissionCountAsync(target, launcher, token);
+                    if (result == MissionCheckResult.BelowTarget)
+                    {
+                        AppendLog($"Conferência — {launcher}: reiniciando as missões diárias para alcançar a meta.");
+                        await DailyFavoriteMissions(token, launcher);
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { AppendLog($"Conferência — {launcher}: {ex.Message}. Nova tentativa na próxima rodada."); }
+            }
         }
     }
 
@@ -1370,7 +1688,7 @@ public partial class FarmingPage : Page
         }
 
         AppendLog($"Missões favoritas — {launcher}: aguardando 7 segundos antes de pressionar N e F9.");
-        await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+        await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Missões favoritas — {launcher}: aguardando 7 segundos antes de pressionar N e F9.", cancellationToken);
         await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
         await Task.Delay(350, cancellationToken);
         await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
@@ -1382,35 +1700,6 @@ public partial class FarmingPage : Page
             throw new InvalidOperationException("não foi possível localizar o ícone de Poupança de energia.");
         AppendLog($"Missões favoritas — {launcher}: Poupança de energia ativada; mantendo o tamanho atual da janela.");
         await _windowClickService.ActivateAsync(target, cancellationToken);
-    }
-
-    private async Task MonitorMissionCompletionAndRetryAsync(PreviewWindow target, string launcher,
-        string templatesDirectory, CancellationToken cancellationToken)
-    {
-        var completedRegion = new RelativeSearchRegion(0.3494, 0.7666, 0.3192, 0.1179);
-        var completedTemplate = Path.Combine(templatesDirectory, "daily-favorite-completed.png");
-        if (!File.Exists(completedTemplate))
-            throw new FileNotFoundException("Falta a imagem de referência do texto 'concluído'.", completedTemplate);
-
-        AppendLog($"Missões favoritas — {launcher}: monitorando continuamente o texto 'concluído'. Use Stop para encerrar a espera.");
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!await IsMissionCompletedVisibleAsync(target, completedTemplate, completedRegion, cancellationToken))
-            {
-                await Task.Delay(500, cancellationToken);
-                continue;
-            }
-
-            var retryMap = GetDailyFavoriteRetryMap(launcher);
-            AppendLog($"Missões favoritas — {launcher}: 'concluído' detectado; repetindo no mapa {retryMap}.");
-            await DailyFavoriteMissions(cancellationToken, retryMap, launcher, allowRetry: false);
-            AppendLog($"Missões favoritas — {launcher}: aguardando o texto 'concluído' desaparecer para rearmar a observação.");
-            while (await IsMissionCompletedVisibleAsync(target, completedTemplate, completedRegion,
-                       cancellationToken, logConfirmation: false))
-                await Task.Delay(1000, cancellationToken);
-            AppendLog($"Missões favoritas — {launcher}: texto 'concluído' desapareceu; observação contínua retomada.");
-        }
     }
 
     private async Task DailyFavoriteRaid(CancellationToken cancellationToken)
@@ -1506,7 +1795,7 @@ public partial class FarmingPage : Page
                 if (raid > 1)
                     await DelayRoutineStartAsync($"DailyFavoriteRaid — raide {raid}/{raidCount}", cancellationToken);
                 AppendLog($"DailyFavoriteRaid — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.");
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                await WaitWithCountdownAsync(TimeSpan.FromSeconds(2), $"DailyFavoriteRaid — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.", cancellationToken);
                 await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
                 await Task.Delay(350, cancellationToken);
                 var steps = new[] { "ícone Raide", "opção Raide", "Criar um Raide (menu)", "Privado", "campo da senha", "botão 2", "Entrada completa", "Criar um Raide", "adicionar convidados", "Convidar todos" };
@@ -1661,7 +1950,7 @@ public partial class FarmingPage : Page
                 if (raid > 1)
                     await DelayRoutineStartAsync($"DailyRaidBoss — raide {raid}/{raidCount}", cancellationToken);
                 AppendLog($"DailyRaidBoss — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.");
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                await WaitWithCountdownAsync(TimeSpan.FromSeconds(2), $"DailyRaidBoss — raide {raid}/{raidCount}: aguardando 2 segundos antes de F9.", cancellationToken);
                 await _windowClickService.PressKeyAsync(starter, 0x78, "F9", cancellationToken, AppendLog);
                 await Task.Delay(350, cancellationToken);
                 foreach (var name in new[] { "ícone Raide", "Raide de Boss", "Criar um Raide (menu)", "Criar um Raide", "adicionar convidados", "Convidar todos" })
@@ -1834,42 +2123,6 @@ public partial class FarmingPage : Page
         }
 
         AppendLog($"DailyScroll: item não encontrado na região após {scrollCount} rolagens. Melhor confiança: {bestConfidence:0.00}; mínimo: {threshold:0.00}. Nenhum clique foi enviado.");
-        return false;
-    }
-
-    private async Task<bool> IsMissionCompletedVisibleAsync(PreviewWindow target, string templatePath,
-        RelativeSearchRegion region, CancellationToken cancellationToken, bool logConfirmation = true)
-    {
-        if (!File.Exists(templatePath))
-        {
-            AppendLog("Missões favoritas: falta a imagem de referência do texto 'concluído'.");
-            return false;
-        }
-
-        var searchTime = System.Diagnostics.Stopwatch.StartNew();
-        var consecutiveMatches = 0;
-        OpenCvSharp.Rect? previousMatch = null;
-        while (searchTime.Elapsed < TimeSpan.FromSeconds(1))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
-            var result = await _templateSearchService.FindAsync(frame, templatePath, region, 0.78,
-                cancellationToken);
-            UpdateDetectionPreview(result);
-            var stablePosition = previousMatch is { } previous &&
-                Math.Abs(previous.X + previous.Width / 2d - result.Bounds.X - result.Bounds.Width / 2d) <= Math.Max(4, result.Bounds.Width * 0.2) &&
-                Math.Abs(previous.Y + previous.Height / 2d - result.Bounds.Y - result.Bounds.Height / 2d) <= Math.Max(4, result.Bounds.Height * 0.2);
-            consecutiveMatches = result.Found ? (stablePosition ? consecutiveMatches + 1 : 1) : 0;
-            previousMatch = result.Found ? result.Bounds : null;
-            if (consecutiveMatches >= 3)
-            {
-                if (logConfirmation)
-                    AppendLog($"Missões favoritas — {target.ProcessName}: texto 'concluído' confirmado ({result.Confidence:0.00}/0.78).");
-                return true;
-            }
-            await Task.Delay(120, cancellationToken);
-        }
-
         return false;
     }
 

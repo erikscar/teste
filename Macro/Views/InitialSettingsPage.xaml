@@ -1,0 +1,15 @@
+<Page x:Class="Macro.Views.InitialSettingsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Configurações iniciais" Background="{StaticResource CanvasBrush}" FontFamily="{StaticResource PoppinsFont}" FontSize="14">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28,24">
+            <TextBlock Text="OPERAÇÕES / CONFIGURAÇÃO" FontSize="10" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,6" />
+            <TextBlock Text="Configurações iniciais" Style="{StaticResource Heading}" />
+            <TextBlock Text="Ajustes gerais para preparar o macro antes de executar as rotinas." Style="{StaticResource Caption}" />
+            <Border Style="{StaticResource Card}" Margin="0,16,0,20">
+                <StackPanel>
+                    <TextBlock Text="Preferências gerais" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock Text="As opções de configuração inicial ficarão disponíveis aqui." Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

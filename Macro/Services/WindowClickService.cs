@@ -268,6 +268,18 @@ public sealed class WindowClickService
         log?.Invoke($"Tecla {keyName} enviada para MIR4 (PID {target.ProcessId}).");
     }
 
+    public async Task HoldKeyAsync(PreviewWindow target, ushort virtualKey, string keyName, TimeSpan duration,
+        CancellationToken token, Action<string>? log = null)
+    {
+        if (duration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(duration));
+        await ActivateAsync(target, token);
+        token.ThrowIfCancellationRequested();
+        SendKeyboard(virtualKey, 0, $"pressionar {keyName}");
+        try { await Task.Delay(duration, token); }
+        finally { SendKeyboard(virtualKey, 0x0002, $"soltar {keyName}"); }
+        log?.Invoke($"Tecla {keyName} mantida por {duration.TotalSeconds:0.#} segundos no MIR4 (PID {target.ProcessId}).");
+    }
+
     public async Task PressEscapeTimesAsync(PreviewWindow target, int count, CancellationToken token,
         Action<string>? log = null)
     {

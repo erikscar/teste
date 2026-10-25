@@ -15,15 +15,29 @@ public sealed class FarmingConfiguration
     public List<string> ActionOrder { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore]
     public IEnumerable<string> OrderedActions => (ActionOrder ?? []).Concat(new[]
-        { "Doação diária", "Pergaminho diário", "Diárias 10/10", "Raids normais", "Boss", "Arena", "Missões favoritas" }).Distinct();
+        { "Doação diária", "Pergaminho diário", "Diárias 10/10", "Minerar Dark Steel", "Raids normais", "Boss", "Arena", "Missões favoritas" }).Distinct();
+    public bool DarkSteelMiningEnabled { get; set; }
+    public List<string> DarkSteelMiningLaunchers { get; set; } = [];
     public List<string> DonationLaunchers { get; set; } = [];
     public List<string>? DailyScrollLaunchers { get; set; }
     public List<string> DailyTenOfTenLaunchers { get; set; } = [];
     public List<string> DailyLaunchers { get; set; } = [];
     public List<string>? DailyFavoriteLaunchers { get; set; }
     public Dictionary<string, string> DailyLauncherMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public List<string> DailyFavoriteRetryLaunchers { get; set; } = [];
-    public Dictionary<string, string> DailyFavoriteRetryMaps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public MissionCompletionCheck DailyCompletionLauncher1 { get; set; } = new();
+    public MissionCompletionCheck DailyCompletionLauncher2 { get; set; } = new();
+    public MissionCompletionCheck DailyCompletionSteam { get; set; } = new();
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IEnumerable<string> DailyMissionLaunchersToRun =>
+        new[] { "MIR4 Launcher 1", "MIR4 Launcher 2", "MIR4 Steam" }
+            .Where(launcher => DailyFavoriteLaunchers?.Contains(launcher) == true || CompletionCheckFor(launcher).Enabled);
+    public MissionCompletionCheck CompletionCheckFor(string launcher) => launcher switch
+    {
+        "MIR4 Launcher 1" => DailyCompletionLauncher1,
+        "MIR4 Launcher 2" => DailyCompletionLauncher2,
+        "MIR4 Steam" => DailyCompletionSteam,
+        _ => throw new ArgumentException("Launcher desconhecido.", nameof(launcher))
+    };
     [System.Text.Json.Serialization.JsonIgnore]
     public bool DailyDonation => DonationLaunchers is { Count: > 0 };
     [System.Text.Json.Serialization.JsonIgnore]
@@ -42,6 +56,17 @@ public sealed class FarmingConfiguration
 
     private static List<MissionItemConfiguration> CreateMissionItems() =>
         [new() { Name = "Platina", Grade = "Rara" }, new() { Name = "Aço", Grade = "Rara" }, new() { Name = "Óleo", Grade = "Rara" }];
+}
+
+public sealed class MissionCompletionCheck
+{
+    public bool Enabled { get; set; }
+    private int _limit;
+    public int Limit
+    {
+        get => _limit;
+        set => _limit = Math.Clamp(value, 0, 30);
+    }
 }
 
 public sealed class RaidConfiguration

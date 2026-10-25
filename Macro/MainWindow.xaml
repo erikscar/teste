@@ -49,6 +49,7 @@
                     <Button x:Name="BtnHome" Style="{StaticResource NavigationItem}" Content="Início" Click="BtnHome_Click" Tag="M2,10 L12,2 L22,10 M5,8 L5,22 L10,22 L10,15 L14,15 L14,22 L19,22 L19,8"/>
                     <Button x:Name="BtnPresets" Style="{StaticResource NavigationItem}" Content="Presets" Click="BtnPresets_Click" Tag="M3,3 L21,3 L21,8 L3,8 Z M3,12 L21,12 L21,21 L3,21 Z M7,16 L17,16"/>
                     <Button x:Name="BtnFarming" Style="{StaticResource NavigationItem}" Content="Farming" Click="BtnFarming_Click" Tag="M3,21 L16,8 M7,3 L13,3 L21,11 L21,17 L17,13 L11,7 Z"/>
+                    <Button x:Name="BtnInitialSettings" Style="{StaticResource NavigationItem}" Content="Configurações iniciais" Click="BtnInitialSettings_Click" Tag="M12,3 L12,12 L18,15 M12,2 A10,10 0 1 1 11.99,2"/>
                     <Border Height="1" Background="#30322E" Margin="12,12"/>
                     <TextBlock Text="FERRAMENTAS" FontSize="9" FontWeight="SemiBold" Foreground="#7F877C" Margin="13,0,0,9"/>
                     <Button x:Name="BtnTimer" Style="{StaticResource NavigationItem}" Content="Timer" Click="BtnTimer_Click" Tag="M12,2 A10,10 0 1 1 11.99,2 M12,6 L12,12 L17,15"/>
