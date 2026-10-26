@@ -1595,7 +1595,7 @@ public partial class FarmingPage : Page
             "Poupança de energia após conferência", 0.78, token);
         if (!count.HasValue)
         {
-            AppendLog($"Conferência — {launcher}: contagem não confirmada; nova tentativa em 20 minutos.");
+            AppendLog($"Conferência — {launcher}: contagem não confirmada; nova tentativa em 40 minutos.");
             return MissionCheckResult.Unknown;
         }
         if (count.Value >= limit)
@@ -1604,13 +1604,13 @@ public partial class FarmingPage : Page
             AppendLog($"Conferência — {launcher}: meta atingida ({count}/30 ≥ {limit}); conferência encerrada.");
             return MissionCheckResult.Complete;
         }
-        AppendLog($"Conferência — {launcher}: {count}/30; ainda não atingiu {limit}. Nova conferência em 20 minutos.");
+        AppendLog($"Conferência — {launcher}: {count}/30; ainda não atingiu {limit}. Nova conferência em 40 minutos.");
         return MissionCheckResult.BelowTarget;
     }
 
     private async Task MonitorDailyMissionCompletionAsync(CancellationToken token)
     {
-        var interval = TimeSpan.FromMinutes(20);
+        var interval = TimeSpan.FromMinutes(40);
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var nextCheck = interval;
         while (true)
@@ -1619,7 +1619,7 @@ public partial class FarmingPage : Page
                 !_completedMissionLaunchers.Contains(launcher)).ToArray();
             if (pending.Length == 0) return;
             StatusText.Text = "Aguardando conferência";
-            AppendLog($"Conferência: próxima rodada em 20 minutos para {string.Join(", ", pending)}. Use Stop para cancelar.");
+            AppendLog($"Conferência: próxima rodada em 40 minutos para {string.Join(", ", pending)}. Use Stop para cancelar.");
             var delay = nextCheck - timer.Elapsed;
             if (delay > TimeSpan.Zero) await WaitWithCountdownAsync(delay, $"Próxima conferência das missões — {string.Join(", ", pending)}.", token);
             nextCheck = timer.Elapsed + interval;

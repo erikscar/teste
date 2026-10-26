@@ -24,7 +24,7 @@ public sealed class FarmingPreset : System.ComponentModel.INotifyPropertyChanged
             (Name: "Launcher 2", Check: configuration.DailyCompletionLauncher2),
             (Name: "Steam", Check: configuration.DailyCompletionSteam)
         }.Where(item => item.Check is { Enabled: true })
-         .Select(item => $"{item.Name}: meta {item.Check.Limit}/30 · conferir a cada 20 minutos"));
+         .Select(item => $"{item.Name}: meta {item.Check.Limit}/30 · conferir a cada 40 minutos"));
 
     [System.Text.Json.Serialization.JsonIgnore]
     public string ScheduleLabel => string.IsNullOrWhiteSpace(Configuration.StartTime)

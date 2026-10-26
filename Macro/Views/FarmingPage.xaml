@@ -441,7 +441,7 @@
                                 </Border>
                             </UniformGrid>
                             <Border Background="#22251E" CornerRadius="6" Padding="14,12" Margin="0,16,0,0">
-                                <TextBlock Text="Ao marcar a conferência, as missões diárias são executadas primeiro. Depois, a meta é verificada a cada 20 minutos; se necessário, as missões são iniciadas novamente."
+                                <TextBlock Text="Ao marcar a conferência, as missões diárias são executadas primeiro. Depois, a meta é verificada a cada 40 minutos; se necessário, as missões são iniciadas novamente."
                                            Style="{StaticResource Caption}" TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
