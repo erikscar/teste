@@ -438,13 +438,7 @@ public partial class FarmingPage : Page
     private async Task DailyArena(CancellationToken cancellationToken)
     {
         var windows = _windowCaptureService.ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         if (!targets.TryGetValue(Configuration.ArenaStarter, out var starter))
             throw new InvalidOperationException($"starter {Configuration.ArenaStarter} não está aberto.");
@@ -533,7 +527,7 @@ public partial class FarmingPage : Page
             await Task.Delay(350, cancellationToken);
         }
 
-        await _windowClickService.ActivateAsync(starter, cancellationToken);
+        await PrepareRoutineWindowAsync(starter, cancellationToken);
         AppendLog($"DailyArena: convite aceito em {Configuration.ArenaInviter}; retornando ao starter, pressionando Esc uma vez e iniciando a Arena.");
         await _windowClickService.PressKeyAsync(starter, 0x1B, "Esc", cancellationToken, AppendLog);
         await Task.Delay(700, cancellationToken);
@@ -550,8 +544,7 @@ public partial class FarmingPage : Page
             regions["Confirmar"], null, "Confirmar", 0.78, cancellationToken);
         if (!confirmed) throw new InvalidOperationException("não foi possível localizar ou clicar em Confirmar após iniciar a Arena.");
         AppendLog("DailyArena: etapa Confirmar concluída.");
-        await _windowClickService.Prepare720pAsync(guest, cancellationToken);
-        await _windowClickService.ActivateAsync(guest, cancellationToken);
+        await PrepareRoutineWindowAsync(guest, cancellationToken);
         await Task.Delay(350, cancellationToken);
         var exited = await FindAndClickTemplateAsync(guest, templates["Sair"],
             regions["Sair"], null, "Sair", 0.78, cancellationToken);
@@ -732,14 +725,7 @@ public partial class FarmingPage : Page
         }
 
         var windows = new WindowPreviewService().ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         var templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "DailyDonate");
         var warehouseTemplatePath = Path.Combine(templatesDirectory, "daily-donate-warehouse.png");
@@ -833,6 +819,36 @@ public partial class FarmingPage : Page
         }
     }
 
+    private async Task CleanDailyScrollBackpackAsync(PreviewWindow target, string launcher, CancellationToken token)
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "DailyScroll");
+        var steps = new (string Image, string Name, RelativeSearchRegion Region)[]
+        {
+            ("backpack-sell-menu.png", "abrir Vender", new(0.7061, 0.8605, 0.1476, 0.1324)),
+            ("backpack-auto-select.png", "Seleção autom.", new(0.3098, 0.8534, 0.1782, 0.1324)),
+            ("backpack-sell.png", "Vender selecionados", new(0.8218, 0.8629, 0.1782, 0.1324)),
+            ("backpack-confirm.png", "confirmar Vender", new(0.4934, 0.5414, 0.1529, 0.1537))
+        };
+        foreach (var step in steps)
+            if (!File.Exists(Path.Combine(directory, step.Image)))
+                throw new FileNotFoundException($"Limpar mochila: imagem ausente — {step.Image}.");
+
+        AppendLog($"Limpar mochila — {launcher}: iniciando antes da compra; usando a seleção automática configurada no jogo.");
+        await _windowClickService.PressKeyAsync(target, 0x76, "F7", token, AppendLog);
+        await Task.Delay(500, token);
+        foreach (var step in steps)
+        {
+            if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
+                null, $"Limpar mochila: {step.Name}", 0.78, token))
+                throw new InvalidOperationException($"Limpar mochila: {step.Name} não encontrado; limpeza e compra interrompidas neste launcher.");
+            await Task.Delay(500, token);
+        }
+        await _windowClickService.PressEscapeTimesAsync(target, 3, token, AppendLog);
+        await WaitWithCountdownAsync(TimeSpan.FromSeconds(4),
+            $"Limpar mochila — {launcher}: aguardando 4 segundos antes de comprar o pergaminho.", token);
+        AppendLog($"Limpar mochila — {launcher}: sequência de venda enviada; continuando para comprar o pergaminho.");
+    }
+
     private async Task DailyScroll(CancellationToken cancellationToken)
     {
         if (Configuration.DailyScrollLaunchers is not { Count: > 0 })
@@ -842,13 +858,7 @@ public partial class FarmingPage : Page
         }
 
         var windows = _windowCaptureService.ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         var templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates", "DailyScroll");
         var mapTemplate = Path.Combine(templatesDirectory, "daily-scroll-map.png");
@@ -891,8 +901,17 @@ public partial class FarmingPage : Page
             try
             {
                 await DelayRoutineStartAsync($"DailyScroll — {launcher}", cancellationToken);
-                AppendLog($"DailyScroll — {launcher}: ajustando para 1280×720 e iniciando com F10.");
+                AppendLog($"DailyScroll — {launcher}: ajustando para 1280×720.");
                 await PrepareRoutineWindowAsync(target, cancellationToken);
+                var cleanBackpack = launcher switch
+                {
+                    "MIR4 Launcher 1" => Configuration.DailyScrollCleanBackpackLauncher1,
+                    "MIR4 Launcher 2" => Configuration.DailyScrollCleanBackpackLauncher2,
+                    "MIR4 Steam" => Configuration.DailyScrollCleanBackpackSteam,
+                    _ => false
+                };
+                if (cleanBackpack)
+                    await CleanDailyScrollBackpackAsync(target, launcher, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x79, "F10", cancellationToken, AppendLog);
                 await Task.Delay(500, cancellationToken);
 
@@ -1004,13 +1023,7 @@ public partial class FarmingPage : Page
                 throw new FileNotFoundException("Minerar Dark Steel: imagem de referência ausente.", template);
 
         var windows = _windowCaptureService.ListWindows();
-        var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var targets = new Dictionary<string, PreviewWindow>();
-        if (clients.Length > 0) targets["MIR4 Launcher 1"] = clients[0];
-        if (clients.Length > 1) targets["MIR4 Launcher 2"] = clients[1];
-        var steam = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        if (steam is not null) targets["MIR4 Steam"] = steam;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         var steps = new (string Template, RelativeSearchRegion Region, string Name)[]
         {
@@ -1144,13 +1157,7 @@ public partial class FarmingPage : Page
                 throw new FileNotFoundException($"Diárias 10/10: falta a imagem de {step.Name}.", Path.Combine(directory, step.Image));
 
         var windows = _windowCaptureService.ListWindows();
-        var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (clients.Length > 0) targets["MIR4 Launcher 1"] = clients[0];
-        if (clients.Length > 1) targets["MIR4 Launcher 2"] = clients[1];
-        var steam = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        if (steam is not null) targets["MIR4 Steam"] = steam;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         foreach (var launcher in Launchers.Where(Configuration.DailyTenOfTenLaunchers.Contains))
         {
@@ -1164,7 +1171,7 @@ public partial class FarmingPage : Page
             try
             {
                 await DelayRoutineStartAsync($"Diárias 10/10 — {launcher}", cancellationToken);
-                await _windowClickService.Prepare720pAsync(target, cancellationToken, AppendLog);
+                await PrepareRoutineWindowAsync(target, cancellationToken);
                 await _windowClickService.PressKeyAsync(target, 0x78, "F9", cancellationToken, AppendLog);
                 started = true;
                 await Task.Delay(500, cancellationToken);
@@ -1233,8 +1240,8 @@ public partial class FarmingPage : Page
                         {
                             // Não enviar Esc após o deslocamento nem após N.
                             started = false;
-                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após Deslocamento rápido antes de Ctrl + 6.");
-                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após Deslocamento rápido antes de Ctrl + 6.", cancellationToken);
+                            AppendLog($"Diárias 10/10 — {launcher}: aguardando 10 segundos após Deslocamento rápido antes de Ctrl + 6.");
+                            await WaitWithCountdownAsync(TimeSpan.FromSeconds(10), $"Diárias 10/10 — {launcher}: aguardando 10 segundos após Deslocamento rápido antes de Ctrl + 6.", cancellationToken);
                             await _windowClickService.PressCtrlNumberAsync(target, 0x36, cancellationToken, AppendLog);
                             await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
                             await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
@@ -1257,8 +1264,8 @@ public partial class FarmingPage : Page
                             if (completed)
                             {
                                 started = false;
-                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de Ctrl + 5.");
-                                await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para ervas antes de Ctrl + 5.", cancellationToken);
+                                AppendLog($"Diárias 10/10 — {launcher}: aguardando 10 segundos após deslocamento para ervas antes de Ctrl + 5.");
+                                await WaitWithCountdownAsync(TimeSpan.FromSeconds(10), $"Diárias 10/10 — {launcher}: aguardando 10 segundos após deslocamento para ervas antes de Ctrl + 5.", cancellationToken);
                                 await _windowClickService.PressCtrlNumberAsync(target, 0x35, cancellationToken, AppendLog);
                                 await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
                                 await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
@@ -1270,7 +1277,8 @@ public partial class FarmingPage : Page
                                 foreach (var step in miningSteps)
                                 {
                                     if (!await FindAndClickTemplateAsync(target, Path.Combine(directory, step.Image), step.Region,
-                                        null, $"10/10: {step.Name}", step.Image == "19-mining-icon.png" ? resourceIconConfidence : 0.78, cancellationToken))
+                        null, $"10/10: {step.Name}", step.Image == "19-mining-icon.png" ? resourceIconConfidence : 0.78, cancellationToken,
+                        matchColor: step.Image == "19-mining-icon.png"))
                                     {
                                         AppendLog($"Diárias 10/10 — {launcher}: mineração interrompida em {step.Name}; próximos cliques e atalhos ignorados.");
                                         completed = false;
@@ -1281,8 +1289,8 @@ public partial class FarmingPage : Page
                                 if (completed)
                                 {
                                     started = false;
-                                    AppendLog($"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de Ctrl + 3.");
-                                    await WaitWithCountdownAsync(TimeSpan.FromSeconds(7), $"Diárias 10/10 — {launcher}: aguardando 7 segundos após deslocamento para minério antes de Ctrl + 3.", cancellationToken);
+                                    AppendLog($"Diárias 10/10 — {launcher}: aguardando 10 segundos após deslocamento para minério antes de Ctrl + 3.");
+                                    await WaitWithCountdownAsync(TimeSpan.FromSeconds(10), $"Diárias 10/10 — {launcher}: aguardando 10 segundos após deslocamento para minério antes de Ctrl + 3.", cancellationToken);
                                     await _windowClickService.PressCtrlNumberAsync(target, 0x33, cancellationToken, AppendLog);
                                     await WaitWithCountdownAsync(TimeSpan.FromSeconds(1), $"Diárias 10/10 — {launcher}: próximo passo — pressionar N.", cancellationToken);
                                     await _windowClickService.PressKeyAsync(target, 0x4E, "N", cancellationToken, AppendLog);
@@ -1316,13 +1324,7 @@ public partial class FarmingPage : Page
         }
 
         var windows = _windowCaptureService.ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         var templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates");
         var fieldTemplate = Path.Combine(templatesDirectory, "daily-favorite-field-name.png");
@@ -1631,14 +1633,7 @@ public partial class FarmingPage : Page
                 {
                     // Abaixo da meta, fecha a conferência e reinicia as missões apenas deste launcher.
                     var windows = _windowCaptureService.ListWindows();
-                    var clients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(window => window.StartedAt).ToArray();
-                    var target = launcher switch
-                    {
-                        "MIR4 Launcher 1" => clients.ElementAtOrDefault(0),
-                        "MIR4 Launcher 2" => clients.ElementAtOrDefault(1),
-                        _ => windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase))
-                    };
+                    var target = LauncherWindowResolver.Resolve(windows).GetValueOrDefault(launcher);
                     if (target is null)
                     {
                         AppendLog($"Conferência — {launcher}: janela não encontrada; nova tentativa na próxima rodada.");
@@ -1713,13 +1708,7 @@ public partial class FarmingPage : Page
 
         var launcherGroup = Configuration.NormalLaunchers;
         var windows = _windowCaptureService.ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         if (!targets.TryGetValue(launcherGroup.Starter, out var starter))
         {
@@ -1837,7 +1826,7 @@ public partial class FarmingPage : Page
                     }
                 }
 
-                await _windowClickService.ActivateAsync(starter, cancellationToken);
+                await PrepareRoutineWindowAsync(starter, cancellationToken);
                 AppendLog("DailyFavoriteRaid: enviando Esc uma vez para fechar a janela da raide.");
                 await _windowClickService.PressKeyAsync(starter, 0x1B, "Esc", cancellationToken, AppendLog);
                 await Task.Delay(350, cancellationToken);
@@ -1855,7 +1844,7 @@ public partial class FarmingPage : Page
                     cancellationToken.ThrowIfCancellationRequested();
                     if (!targets.TryGetValue(guestName, out var guest)) continue;
                     AppendLog($"DailyFavoriteRaid — OK do starter clicado; mudando para {guestName} para procurar o OK na mesma região.");
-                    await _windowClickService.Prepare720pAsync(guest, cancellationToken);
+                    await PrepareRoutineWindowAsync(guest, cancellationToken, dismissOk: false);
                     await WaitAndClickTemplateIndefinitelyAsync(guest, templates["OK"], regions["OK"],
                         cancellationToken);
                     AppendLog($"DailyFavoriteRaid — OK clicado em {guestName}.");
@@ -1888,13 +1877,7 @@ public partial class FarmingPage : Page
 
         var launcherGroup = Configuration.BossLaunchers;
         var windows = _windowCaptureService.ListWindows();
-        var gameClients = windows.Where(window => window.ProcessName.StartsWith("Mir4G", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(window => window.StartedAt).ToArray();
-        var targets = new Dictionary<string, PreviewWindow>(StringComparer.OrdinalIgnoreCase);
-        if (gameClients.Length > 0) targets["MIR4 Launcher 1"] = gameClients[0];
-        if (gameClients.Length > 1) targets["MIR4 Launcher 2"] = gameClients[1];
-        var steamWindow = windows.FirstOrDefault(window => window.ProcessName.StartsWith("Mir4S", StringComparison.OrdinalIgnoreCase));
-        if (steamWindow is not null) targets["MIR4 Steam"] = steamWindow;
+        var targets = LauncherWindowResolver.Resolve(windows);
 
         if (!targets.TryGetValue(launcherGroup.Starter, out var starter))
         {
@@ -1991,7 +1974,7 @@ public partial class FarmingPage : Page
                     }
                 }
 
-                await _windowClickService.ActivateAsync(starter, cancellationToken);
+                await PrepareRoutineWindowAsync(starter, cancellationToken);
                 AppendLog($"DailyRaidBoss — convidados processados; retornando ao starter {launcherGroup.Starter} para aguardar o OK final da raide.");
                 await WaitAndClickTemplateIndefinitelyAsync(starter, templates["OK"], regions["OK"],
                     cancellationToken, "DailyRaidBoss");
@@ -2000,7 +1983,7 @@ public partial class FarmingPage : Page
                     cancellationToken.ThrowIfCancellationRequested();
                     if (!targets.TryGetValue(guestName, out var guest)) continue;
                     AppendLog($"DailyRaidBoss — starter confirmou o OK; aguardando o mesmo OK em {guestName}.");
-                    await _windowClickService.Prepare720pAsync(guest, cancellationToken);
+                    await PrepareRoutineWindowAsync(guest, cancellationToken, dismissOk: false);
                     await WaitAndClickTemplateIndefinitelyAsync(guest, templates["OK"], regions["OK"],
                         cancellationToken, "DailyRaidBoss");
                 }
@@ -2129,7 +2112,7 @@ public partial class FarmingPage : Page
     private async Task<bool> FindAndClickTemplateAsync(PreviewWindow target, string templatePath,
         RelativeSearchRegion region, Int32Rect? templateCrop, string targetName, double threshold,
         CancellationToken cancellationToken, double? clickAnchorX = null, double? clickAnchorY = null,
-        TimeSpan? timeoutOverride = null, int clickCount = 1, bool logFailure = true)
+        TimeSpan? timeoutOverride = null, int clickCount = 1, bool logFailure = true, bool matchColor = false)
     {
         var searchTime = System.Diagnostics.Stopwatch.StartNew();
         var consecutiveMatches = 0;
@@ -2142,7 +2125,7 @@ public partial class FarmingPage : Page
             cancellationToken.ThrowIfCancellationRequested();
             var frame = await _windowCaptureService.CaptureAsync(target, cancellationToken);
             var result = await _templateSearchService.FindAsync(frame, templatePath, region, threshold,
-                cancellationToken, templateCrop);
+                cancellationToken, templateCrop, matchColor);
             UpdateDetectionPreview(result);
             bestConfidence = Math.Max(bestConfidence, result.Confidence);
             var stablePosition = previousMatch is { } previous &&
@@ -2191,13 +2174,13 @@ public partial class FarmingPage : Page
         ExecutionLog.ScrollToEnd();
     }
 
-    private async Task PrepareRoutineWindowAsync(PreviewWindow target, CancellationToken token)
+    private async Task PrepareRoutineWindowAsync(PreviewWindow target, CancellationToken token, bool dismissOk = true)
     {
         await _windowClickService.Prepare720pAsync(target, token);
-        await DismissStartupScreensAsync(target, token);
+        await DismissStartupScreensAsync(target, token, dismissOk);
     }
 
-    private async Task DismissStartupScreensAsync(PreviewWindow target, CancellationToken token)
+    private async Task DismissStartupScreensAsync(PreviewWindow target, CancellationToken token, bool dismissOk = true)
     {
         var directory = Path.Combine(AppContext.BaseDirectory, "Assets", "Templates");
         var powerTemplate = Path.Combine(directory, "routine-start-energy.png");
@@ -2212,7 +2195,7 @@ public partial class FarmingPage : Page
             var frame = await _windowCaptureService.CaptureAsync(target, token);
             var power = await _templateSearchService.FindAsync(frame, powerTemplate, powerRegion, 0.80, token, powerCrop);
             var ok = await _templateSearchService.FindAsync(frame, okTemplate, okRegion, 0.85, token);
-            if (!power.Found && !ok.Found) return;
+            if (!power.Found && (!dismissOk || !ok.Found)) return;
             if (attempt == 3) throw new InvalidOperationException("A tela inicial de poupança/OK permaneceu aberta; rotina interrompida.");
             await Task.Delay(150, token);
             frame = await _windowCaptureService.CaptureAsync(target, token);

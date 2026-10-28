@@ -224,11 +224,56 @@
                                         AutomationProperties.Name="Informações da rotina"><Button.ToolTip><ToolTip Background="#242820" Foreground="#F5F0E5" BorderBrush="#8A7550" Padding="12" Placement="Bottom"><TextBlock Text="Pressiona F10 e compra o pergaminho diário. Selecione um ou mais launchers para executar esta rotina." MaxWidth="340" TextWrapping="Wrap" FontFamily="{StaticResource PoppinsFont}" FontSize="12" Foreground="#F5F0E5" /></ToolTip></Button.ToolTip></Button>
                             </StackPanel>
                         </Grid>
-                        <TextBlock Text="Launchers do Pergaminho Diário" FontWeight="SemiBold" Margin="0,14,0,8" />
+                        <TextBlock Text="Configure a compra e a limpeza para cada launcher." Style="{StaticResource Caption}" Margin="0,8,0,14" />
                         <WrapPanel>
-                            <CheckBox x:Name="ScrollLauncher1" Style="{StaticResource DonationChoice}" Content="Launcher 1" Tag="MIR4 Launcher 1" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" />
-                            <CheckBox x:Name="ScrollLauncher2" Style="{StaticResource DonationChoice}" Content="Launcher 2" Tag="MIR4 Launcher 2" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" />
-                            <CheckBox x:Name="ScrollSteam" Style="{StaticResource DonationChoice}" Content="Steam" Tag="MIR4 Steam" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" />
+                            <Border Width="220" Padding="16" Margin="0,0,12,12" CornerRadius="10" Background="#22251E" BorderBrush="#454A3B" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Launcher 1" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,12" />
+                                    <CheckBox x:Name="ScrollLauncher1" Content="Comprar pergaminho" Tag="MIR4 Launcher 1" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" AutomationProperties.Name="Comprar pergaminho — Launcher 1" />
+                                    <Border Height="1" Background="#3C4134" Margin="0,14" />
+                                    <CheckBox Content="Limpar mochila" IsChecked="{Binding Configuration.DailyScrollCleanBackpackLauncher1, Mode=TwoWay}"
+                                              IsEnabled="{Binding IsChecked, ElementName=ScrollLauncher1}" AutomationProperties.Name="Limpar mochila — Launcher 1">
+                                        <CheckBox.ToolTip>
+                                            <ToolTip Background="#242820" Foreground="#F5F0E5" BorderBrush="#8A7550" Padding="12" Placement="Bottom">
+                                                <TextBlock Text="Limpa a mochila antes de comprar o pergaminho. Configure a Seleção autom. do jogo para equipamentos verdes e materiais cinzas." MaxWidth="300" TextWrapping="Wrap" />
+                                            </ToolTip>
+                                        </CheckBox.ToolTip>
+                                    </CheckBox>
+                                    <TextBlock Text="Equipamentos verdes&#10;e materiais cinzas" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="24,7,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                            <Border Width="220" Padding="16" Margin="0,0,12,12" CornerRadius="10" Background="#22251E" BorderBrush="#454A3B" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Launcher 2" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,12" />
+                                    <CheckBox x:Name="ScrollLauncher2" Content="Comprar pergaminho" Tag="MIR4 Launcher 2" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" AutomationProperties.Name="Comprar pergaminho — Launcher 2" />
+                                    <Border Height="1" Background="#3C4134" Margin="0,14" />
+                                    <CheckBox Content="Limpar mochila" IsChecked="{Binding Configuration.DailyScrollCleanBackpackLauncher2, Mode=TwoWay}"
+                                              IsEnabled="{Binding IsChecked, ElementName=ScrollLauncher2}" AutomationProperties.Name="Limpar mochila — Launcher 2">
+                                        <CheckBox.ToolTip>
+                                            <ToolTip Background="#242820" Foreground="#F5F0E5" BorderBrush="#8A7550" Padding="12" Placement="Bottom">
+                                                <TextBlock Text="Limpa a mochila antes de comprar o pergaminho. Configure a Seleção autom. do jogo para equipamentos verdes e materiais cinzas." MaxWidth="300" TextWrapping="Wrap" />
+                                            </ToolTip>
+                                        </CheckBox.ToolTip>
+                                    </CheckBox>
+                                    <TextBlock Text="Equipamentos verdes&#10;e materiais cinzas" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="24,7,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                            <Border Width="220" Padding="16" Margin="0,0,12,12" CornerRadius="10" Background="#22251E" BorderBrush="#454A3B" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Steam" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,12" />
+                                    <CheckBox x:Name="ScrollSteam" Content="Comprar pergaminho" Tag="MIR4 Steam" Checked="ScrollLauncher_Checked" Unchecked="ScrollLauncher_Unchecked" AutomationProperties.Name="Comprar pergaminho — Steam" />
+                                    <Border Height="1" Background="#3C4134" Margin="0,14" />
+                                    <CheckBox Content="Limpar mochila" IsChecked="{Binding Configuration.DailyScrollCleanBackpackSteam, Mode=TwoWay}"
+                                              IsEnabled="{Binding IsChecked, ElementName=ScrollSteam}" AutomationProperties.Name="Limpar mochila — Steam">
+                                        <CheckBox.ToolTip>
+                                            <ToolTip Background="#242820" Foreground="#F5F0E5" BorderBrush="#8A7550" Padding="12" Placement="Bottom">
+                                                <TextBlock Text="Limpa a mochila antes de comprar o pergaminho. Configure a Seleção autom. do jogo para equipamentos verdes e materiais cinzas." MaxWidth="300" TextWrapping="Wrap" />
+                                            </ToolTip>
+                                        </CheckBox.ToolTip>
+                                    </CheckBox>
+                                    <TextBlock Text="Equipamentos verdes&#10;e materiais cinzas" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="24,7,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                         </WrapPanel>
                         <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,16" />
                         <Grid>
@@ -510,9 +555,7 @@
                     <TabItem Header="Outros" Tag="M4,4 L9,4 L9,9 L4,9 Z M15,4 L20,4 L20,9 L15,9 Z M4,15 L9,15 L9,20 L4,20 Z">
                         <StackPanel>
                             <TextBlock Text="Outros" Style="{StaticResource PageSectionHeading}" />
-                            <CheckBox Content="Minerar Dark Steel" IsChecked="{Binding Configuration.DarkSteelMiningEnabled, Mode=TwoWay}"
-                                      Margin="0,10,0,4" AutomationProperties.Name="Minerar Dark Steel" />
-                            <TextBlock Text="Ative para localizar o ponto de mineração, selecionar Dark Steel e iniciar a coleta automaticamente."
+                            <TextBlock Text="Selecione pelo menos um launcher para localizar o ponto de mineração, selecionar Dark Steel e iniciar a coleta automaticamente."
                                        Style="{StaticResource Caption}" TextWrapping="Wrap" />
                             <TextBlock Text="Launchers para minerar Dark Steel" FontWeight="SemiBold" Margin="0,14,0,8" />
                             <WrapPanel>

@@ -6,7 +6,10 @@ using System.Windows.Media.Imaging;
 
 namespace Macro.Services;
 
-public sealed record PreviewWindow(nint Handle, int ProcessId, string ProcessName, DateTime StartedAt, string Label);
+public sealed record PreviewWindow(nint Handle, int ProcessId, string ProcessName, DateTime StartedAt, string Label)
+{
+    public string WindowTitle { get; init; } = "";
+}
 
 // Solicita à própria janela a renderização da área cliente, sem ler pixels de janelas sobrepostas.
 public sealed class WindowPreviewService
@@ -23,7 +26,8 @@ public sealed class WindowPreviewService
                     if (process.Id != Environment.ProcessId && process.MainWindowHandle != 0 &&
                         process.ProcessName.Contains("mir4", StringComparison.OrdinalIgnoreCase))
                         windows.Add(new(process.MainWindowHandle, process.Id, process.ProcessName, process.StartTime,
-                            $"{process.ProcessName} ({process.Id}) — {process.MainWindowTitle}"));
+                            $"{process.ProcessName} ({process.Id}) — {process.MainWindowTitle}")
+                            { WindowTitle = process.MainWindowTitle });
                 }
                 catch (InvalidOperationException) { }
                 catch (System.ComponentModel.Win32Exception) { }

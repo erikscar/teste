@@ -18,21 +18,21 @@ public sealed class TemplateSearchService
     private static readonly ConcurrentDictionary<TemplateCacheKey, Lazy<IReadOnlyList<TemplateVariant>>> TemplateCache = new();
 
     public Task<TemplateSearchResult> FindAsync(BitmapSource frame, string templatePath,
-        RelativeSearchRegion region, double threshold, CancellationToken token, Int32Rect? templateCrop = null) =>
-        Task.Run(() => Find(frame, templatePath, region, threshold, token, templateCrop), token);
+        RelativeSearchRegion region, double threshold, CancellationToken token, Int32Rect? templateCrop = null, bool matchColor = false) =>
+        Task.Run(() => Find(frame, templatePath, region, threshold, token, templateCrop, matchColor), token);
 
     private static TemplateSearchResult Find(BitmapSource frame, string templatePath,
-        RelativeSearchRegion region, double threshold, CancellationToken token, Int32Rect? templateCrop)
+        RelativeSearchRegion region, double threshold, CancellationToken token, Int32Rect? templateCrop, bool matchColor)
     {
         Validate(region, threshold);
         using var color = ToBgr(frame);
         using var gray = new Mat();
-        Cv2.CvtColor(color, gray, ColorConversionCodes.BGR2GRAY);
+        if (matchColor) color.CopyTo(gray); else Cv2.CvtColor(color, gray, ColorConversionCodes.BGR2GRAY);
         var fullPath = Path.GetFullPath(templatePath);
         var file = new FileInfo(fullPath);
         if (!file.Exists) throw new FileNotFoundException("Não foi possível abrir a imagem selecionada.", fullPath);
         var key = new TemplateCacheKey(fullPath, file.Length, file.LastWriteTimeUtc.Ticks,
-            templateCrop?.X ?? -1, templateCrop?.Y ?? -1, templateCrop?.Width ?? -1, templateCrop?.Height ?? -1);
+            templateCrop?.X ?? -1, templateCrop?.Y ?? -1, templateCrop?.Width ?? -1, templateCrop?.Height ?? -1, matchColor);
         var variants = TemplateCache.GetOrAdd(key, cacheKey => new Lazy<IReadOnlyList<TemplateVariant>>(
             () => LoadVariants(cacheKey), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         token.ThrowIfCancellationRequested();
@@ -61,6 +61,19 @@ public sealed class TemplateSearchService
             else
                 Cv2.MatchTemplate(roiMat, scaledTemplate, scores, TemplateMatchModes.CCoeffNormed);
             Cv2.MinMaxLoc(scores, out _, out var max, out _, out var location);
+            if (matchColor)
+            {
+                // Continua procurando quando o melhor formato tem a cor errada.
+                for (var candidate = 0; candidate < 100 && double.IsFinite(max) && max >= threshold; candidate++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    using var patch = new Mat(roiMat, new OpenCvSharp.Rect(location.X, location.Y, width, height));
+                    if (HasMatchingHue(scaledTemplate, patch, variant.Mask)) break;
+                    scores.Set<float>(location.Y, location.X, -1);
+                    Cv2.MinMaxLoc(scores, out _, out max, out _, out location);
+                    if (candidate == 99) max = 0;
+                }
+            }
             if (double.IsFinite(max) && max > confidence)
             {
                 confidence = max;
@@ -90,6 +103,29 @@ public sealed class TemplateSearchService
         return new(found, confidence, bounds, bitmap);
     }
 
+    private static bool HasMatchingHue(Mat template, Mat candidate, Mat? mask)
+    {
+        using var expected = new Mat();
+        using var actual = new Mat();
+        Cv2.CvtColor(template, expected, ColorConversionCodes.BGR2HSV);
+        Cv2.CvtColor(candidate, actual, ColorConversionCodes.BGR2HSV);
+        var colored = 0;
+        var matched = 0;
+        for (var y = 0; y < expected.Rows; y++)
+        for (var x = 0; x < expected.Cols; x++)
+        {
+            if (mask is not null && mask.At<byte>(y, x) == 0) continue;
+            var a = expected.At<Vec3b>(y, x);
+            if (a.Item1 < 70 || a.Item2 < 60) continue;
+            colored++;
+            var b = actual.At<Vec3b>(y, x);
+            var difference = Math.Abs(a.Item0 - b.Item0);
+            if (b.Item1 >= 50 && b.Item2 >= 40 && Math.Min(difference, 180 - difference) <= 15)
+                matched++;
+        }
+        return colored >= 8 && matched >= colored * 0.75;
+    }
+
     private static IReadOnlyList<TemplateVariant> LoadVariants(TemplateCacheKey key)
     {
         using var sourceTemplate = Cv2.ImRead(key.Path, ImreadModes.Unchanged);
@@ -98,12 +134,12 @@ public sealed class TemplateSearchService
         using var originalMask = new Mat();
         if (sourceTemplate.Channels() == 4)
         {
-            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGRA2GRAY);
+            Cv2.CvtColor(sourceTemplate, originalTemplate, key.MatchColor ? ColorConversionCodes.BGRA2BGR : ColorConversionCodes.BGRA2GRAY);
             Cv2.ExtractChannel(sourceTemplate, originalMask, 3);
             Cv2.Threshold(originalMask, originalMask, 0, 255, ThresholdTypes.Binary);
         }
         else if (sourceTemplate.Channels() == 3)
-            Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGR2GRAY);
+            { if (key.MatchColor) sourceTemplate.CopyTo(originalTemplate); else Cv2.CvtColor(sourceTemplate, originalTemplate, ColorConversionCodes.BGR2GRAY); }
         else
             sourceTemplate.CopyTo(originalTemplate);
 
@@ -139,7 +175,7 @@ public sealed class TemplateSearchService
     }
 
     private sealed record TemplateCacheKey(string Path, long Length, long LastWriteTicks,
-        int CropX, int CropY, int CropWidth, int CropHeight);
+        int CropX, int CropY, int CropWidth, int CropHeight, bool MatchColor);
     private sealed record TemplateVariant(Mat Template, Mat? Mask);
 
     private static Mat ToBgr(BitmapSource frame)

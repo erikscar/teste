@@ -16,10 +16,14 @@ public sealed class FarmingConfiguration
     [System.Text.Json.Serialization.JsonIgnore]
     public IEnumerable<string> OrderedActions => (ActionOrder ?? []).Concat(new[]
         { "Doação diária", "Pergaminho diário", "Diárias 10/10", "Minerar Dark Steel", "Raids normais", "Boss", "Arena", "Missões favoritas" }).Distinct();
-    public bool DarkSteelMiningEnabled { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool DarkSteelMiningEnabled => DarkSteelMiningLaunchers is { Count: > 0 };
     public List<string> DarkSteelMiningLaunchers { get; set; } = [];
     public List<string> DonationLaunchers { get; set; } = [];
     public List<string>? DailyScrollLaunchers { get; set; }
+    public bool DailyScrollCleanBackpackLauncher1 { get; set; }
+    public bool DailyScrollCleanBackpackLauncher2 { get; set; }
+    public bool DailyScrollCleanBackpackSteam { get; set; }
     public List<string> DailyTenOfTenLaunchers { get; set; } = [];
     public List<string> DailyLaunchers { get; set; } = [];
     public List<string>? DailyFavoriteLaunchers { get; set; }
