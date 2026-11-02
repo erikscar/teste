@@ -44,6 +44,22 @@
             "rid": "win-x86"
           }
         }
+      },
+      "Tesseract/5.2.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/Tesseract.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Tesseract.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/Tesseract.targets": {}
+        }
       }
     },
     "net10.0-windows/win-x64": {
@@ -74,6 +90,22 @@
         },
         "build": {
           "build/net5.0/OpenCvSharp4.runtime.win.props": {}
+        }
+      },
+      "Tesseract/5.2.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/Tesseract.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Tesseract.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/Tesseract.targets": {}
         }
       }
     }
@@ -166,33 +198,54 @@
         "runtimes/win-x86/native/OpenCvSharpExtern.dll",
         "runtimes/win-x86/native/opencv_videoio_ffmpeg4110.dll"
       ]
+    },
+    "Tesseract/5.2.0": {
+      "sha512": "YB7feJlrTWSXtK8+WaCcseGSPK/1r2d2FWeKGyndlrPwYClrzTlCoHD4/oQEUjKafmpkWlhTZZ7pxiRJYZgj6w==",
+      "type": "package",
+      "path": "tesseract/5.2.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/Tesseract.targets",
+        "lib/net47/Tesseract.dll",
+        "lib/net48/Tesseract.dll",
+        "lib/netstandard2.0/Tesseract.dll",
+        "lib/netstandard2.0/Tesseract.xml",
+        "tesseract.5.2.0.nupkg.sha512",
+        "tesseract.nuspec",
+        "x64/leptonica-1.82.0.dll",
+        "x64/tesseract50.dll",
+        "x86/leptonica-1.82.0.dll",
+        "x86/tesseract50.dll"
+      ]
     }
   },
   "projectFileDependencyGroups": {
     "net10.0-windows": [
       "Microsoft.NET.ILLink.Tasks >= 10.0.12",
       "OpenCvSharp4 >= 4.11.0.20250507",
-      "OpenCvSharp4.runtime.win >= 4.11.0.20250507"
+      "OpenCvSharp4.runtime.win >= 4.11.0.20250507",
+      "Tesseract >= 5.2.0"
     ]
   },
   "packageFolders": {
-    "C:\\Users\\eriks\\.nuget\\packages\\": {},
+    "C:\\Users\\Erik\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Macro\\teste\\Macro\\MacroMir4.csproj",
+      "projectUniqueName": "C:\\teste\\Macro\\MacroMir4.csproj",
       "projectName": "MacroMir4",
-      "projectPath": "C:\\Macro\\teste\\Macro\\MacroMir4.csproj",
-      "packagesPath": "C:\\Users\\eriks\\.nuget\\packages\\",
-      "outputPath": "C:\\Macro\\teste\\Macro\\obj\\",
+      "projectPath": "C:\\teste\\Macro\\MacroMir4.csproj",
+      "packagesPath": "C:\\Users\\Erik\\.nuget\\packages\\",
+      "outputPath": "C:\\teste\\Macro\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\eriks\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Erik\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -240,6 +293,10 @@
           "OpenCvSharp4.runtime.win": {
             "target": "Package",
             "version": "[4.11.0.20250507, )"
+          },
+          "Tesseract": {
+            "target": "Package",
+            "version": "[5.2.0, )"
           }
         },
         "imports": [

@@ -1132,7 +1132,7 @@ public partial class FarmingPage : Page
             ("10-close.png", "fechar encantamento", new(0.9159, 0.0149, 0.0841, 0.1081)),
             ("11-ok.png", "OK do encantamento", new(0.4945, 0.6094, 0.1589, 0.1204))
         };
-        var resourceIconRegion = new RelativeSearchRegion(0.3019, 0.1135, 0.3963, 0.6052);
+        var resourceIconRegion = new RelativeSearchRegion(0.2979, 0.0993, 0.3896, 0.7423);
         const double resourceIconConfidence = 0.70;
         var travelSteps = new (string Image, string Name, RelativeSearchRegion Region)[]
         {
@@ -1473,9 +1473,12 @@ public partial class FarmingPage : Page
                 foreach (var step in favoriteSteps)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    Int32Rect? crop = step.Name == "item Deslocamento rápido"
-                        ? new Int32Rect(7, 9, 32, 34)
-                        : null;
+                    Int32Rect? crop = step.Name switch
+                    {
+                        "Deslocamento rápido" => new Int32Rect(2, 5, 50, 49),
+                        "item Deslocamento rápido" => new Int32Rect(7, 9, 32, 34),
+                        _ => null
+                    };
                     var threshold = step.Name switch
                     {
                         "Deslocamento rápido" => 0.60,
@@ -2114,6 +2117,14 @@ public partial class FarmingPage : Page
         CancellationToken cancellationToken, double? clickAnchorX = null, double? clickAnchorY = null,
         TimeSpan? timeoutOverride = null, int clickCount = 1, bool logFailure = true, bool matchColor = false)
     {
+        // Os botões de viagem compartilham o pergaminho; texto e saldo variam.
+        if (Path.GetFileName(templatePath) is "14-fast-travel.png" or "17-herb-travel.png" or "20-mining-travel.png")
+        {
+            templatePath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(templatePath)!,
+                "..", "daily-favorite-travel-item.png"));
+            templateCrop = new Int32Rect(7, 9, 32, 34);
+        }
+
         var searchTime = System.Diagnostics.Stopwatch.StartNew();
         var consecutiveMatches = 0;
         var bestConfidence = 0d;
