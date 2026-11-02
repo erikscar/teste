@@ -55,6 +55,7 @@ public partial class FarmingPage : Page
     public FarmingPage()
     {
         InitializeComponent();
+        Application.Current.Exit += (_, _) => _texasCancellation?.Cancel();
         NormalRaids = [Configuration.Normal, new() { Name = "Raide 2" }, new() { Name = "Raide 3" }];
         BossRaids = [Configuration.Boss, new() { Name = "Boss 2" }, new() { Name = "Boss 3" }];
         DataContext = this;

@@ -550,6 +550,17 @@
                                 <ComboBox ItemsSource="{Binding Launchers}" SelectedItem="{Binding Configuration.MagicSquareLauncher, Mode=TwoWay}"
                                           AutomationProperties.Name="Launcher da Praça Mágica" />
                             </StackPanel>
+                            <Border Background="#22251E" BorderBrush="#454A3B" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Texas" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Maximiza o Launcher 1. Com o jogo em primeiro plano, pressione Mouse4 para clicar no botão azul acima de Amovível." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,14" />
+                                    <WrapPanel>
+                                        <Button x:Name="StartTexasButton" Content="Iniciar Texas" Click="StartTexas_Click" Padding="18,10" Margin="0,0,10,8" />
+                                        <Button x:Name="StopTexasButton" Content="Stop Texas" Click="StopTexas_Click" IsEnabled="False" Style="{StaticResource SecondaryButton}" Padding="18,10" Margin="0,0,0,8" />
+                                    </WrapPanel>
+                                    <TextBlock x:Name="TexasStatusText" Text="Texas parado" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </TabItem>
                     <TabItem Header="Outros" Tag="M4,4 L9,4 L9,9 L4,9 Z M15,4 L20,4 L20,9 L15,9 Z M4,15 L9,15 L9,20 L4,20 Z">

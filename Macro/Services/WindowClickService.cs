@@ -195,15 +195,23 @@ public sealed class WindowClickService
     }
 
     public async Task<(int X, int Y)> ClickRelativeAsync(PreviewWindow target, double x, double y,
-        CancellationToken token, Action<string>? log = null)
+        CancellationToken token, Action<string>? log = null, bool instantMove = false)
     {
         if (!double.IsFinite(x) || !double.IsFinite(y) || x is < 0 or > 1 || y is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(x));
         log?.Invoke($"Clique: ativando PID {target.ProcessId}, HWND=0x{target.Handle:X}.");
         await ActivateAsync(target, token);
-        var point = await MoveCursorAsync(target, x, y, token);
+        NativePoint point;
+        if (instantMove)
+        {
+            var oldDpi = SetThreadDpiAwarenessContext(new nint(-4));
+            try { point = MoveCursorToPoint(ResolvePoint(target, x, y)); }
+            finally { if (oldDpi != 0) SetThreadDpiAwarenessContext(oldDpi); }
+        }
+        else
+            point = await MoveCursorAsync(target, x, y, token);
         log?.Invoke($"Clique: movimento SendInput aceito para X={point.X}, Y={point.Y}.");
-        await Task.Delay(Random.Shared.Next(160, 281), token);
+        if (!instantMove) await Task.Delay(Random.Shared.Next(160, 281), token);
         VerifyClickTarget(target, point, x, y);
         token.ThrowIfCancellationRequested();
         SendMouse(0x0002, "pressionar");
@@ -219,6 +227,37 @@ public sealed class WindowClickService
         }
         log?.Invoke("Clique: botão esquerdo solto (SendInput aceito).");
         return (point.X, point.Y);
+    }
+
+    public async Task ClickRelativeAndRestoreInstantAsync(PreviewWindow target, double x, double y, CancellationToken token)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y) || x is < 0 or > 1 || y is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(x));
+        token.ThrowIfCancellationRequested();
+        ValidateTarget(target);
+        if (GetForegroundWindow() != target.Handle) return;
+        var oldDpi = SetThreadDpiAwarenessContext(new nint(-4));
+        try
+        {
+            if (!GetCursorPos(out var original))
+                throw new InvalidOperationException("Não foi possível ler a posição inicial do mouse.");
+            var point = ResolvePoint(target, x, y);
+            try
+            {
+                MoveCursorToPoint(point);
+                // O jogo precisa atualizar o alvo sob o cursor antes do mouse-down.
+                await Task.Delay(60, token);
+                VerifyClickTarget(target, point, x, y);
+                token.ThrowIfCancellationRequested();
+                SendMouse(0x0002, "pressionar");
+                try { await Task.Delay(100, token); }
+                finally { SendMouse(0x0004, "soltar"); }
+                // Mantém o cursor no botão até o jogo processar o mouse-up.
+                await Task.Delay(60, token);
+            }
+            finally { MoveCursorToPoint(original); }
+        }
+        finally { if (oldDpi != 0) SetThreadDpiAwarenessContext(oldDpi); }
     }
 
     public async Task PressEscapeThreeTimesAsync(PreviewWindow target, CancellationToken token, Action<string>? log = null)
